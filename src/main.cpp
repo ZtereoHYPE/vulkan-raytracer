@@ -20,10 +20,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH = 400;
+const uint32_t HEIGHT = 300;
 
-const int MAX_FRAMES_IN_FLIGHT = 2;
+const int MAX_FRAMES_IN_FLIGHT = 1;
 
 const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};
 
@@ -74,9 +74,8 @@ static std::vector<char> readFile(const std::string& filename) {
 }
 
 struct UniformBufferObject {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
+    uint32_t width;
+    uint32_t height;
 };
 
 struct Vertex {
@@ -111,13 +110,6 @@ struct Vertex {
 
         return attributeDescriptions;
     }
-};
-
-
-const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.0f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
 };
 
 struct QueueFamilyIndices {
@@ -216,7 +208,6 @@ class HelloWorldTriangleApp {
         createGraphicsPipeline();
         createFramebuffers();
         createCommandPool();
-        createVertexBuffer();
         createUniformBuffers();
         createDescriptorPool();
         createDescriptorSets();
@@ -300,7 +291,7 @@ class HelloWorldTriangleApp {
         uboLayoutBinding.binding = 0;
         uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         uboLayoutBinding.descriptorCount = 1;
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT; // this is going to be accessible in both stages (change to only fragment)
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT; // this is going to be accessible in both stages (change to only fragment)
         uboLayoutBinding.pImmutableSamplers = nullptr;
 
         VkDescriptorSetLayoutCreateInfo layoutInfo {};
@@ -311,31 +302,6 @@ class HelloWorldTriangleApp {
         if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor set layout");
         }
-    }
-
-    void createVertexBuffer() {
-        size_t bufferSize = sizeof(vertices[0]) * vertices.size();
-
-        // create staging buffers
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-        // map to cpu memory, write, and unmap
-        void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, vertices.data(), bufferSize);
-        vkUnmapMemory(device, stagingBufferMemory); // this might not be flushed immediately to gpu memory! (use host coherent mem or vkflushmappedmem)
-
-        // create actual vertex buffer
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory); //very fast local memory
-
-        // we now need to transfer from staging to vertex memory
-        copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
     void copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) {
@@ -530,14 +496,15 @@ class HelloWorldTriangleApp {
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
         // bind the vertex buffer(s)
-        VkBuffer vertexBuffers[] = {vertexBuffer};
-        VkDeviceSize offsets[] = {0};
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+        //VkBuffer vertexBuffers[] = {vertexBuffer};
+        //VkDeviceSize offsets[] = {0};
+        //vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
         // uniforms!
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
-        vkCmdDraw(commandBuffer, vertices.size(), 1, 0, 0); // the one and only
+        //vkCmdDraw(commandBuffer, vertices.size(), 1, 0, 0);
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0); // we only draw 1 triangle that covers clip space and it's hardcoded in the shader
 
         vkCmdEndRenderPass(commandBuffer);
 
@@ -605,8 +572,8 @@ class HelloWorldTriangleApp {
 
         /* SHADERS */
 
-        auto vertexShaderSrc = readFile("shaders/vert.spv");
-        auto fragmentShaderSrc = readFile("shaders/frag.spv");
+        auto vertexShaderSrc = readFile("build/shaders/shader.vert.spv");
+        auto fragmentShaderSrc = readFile("build/shaders/shader.frag.spv");
 
         // these are just a thin wrapper around the SPIR-V bytecode
         VkShaderModule vertexShader = createShaderModule(vertexShaderSrc);
@@ -631,16 +598,12 @@ class HelloWorldTriangleApp {
 
         /* VERTEX INPUT AND ASSEMBLY */
 
-        // no vertex input for now
+        // our vertex input format
         VkPipelineVertexInputStateCreateInfo vertexInputInfo {};
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        vertexInputInfo.vertexBindingDescriptionCount = 1;
-        auto bindingDescriptions = Vertex::getBindingDescription();
-        vertexInputInfo.pVertexBindingDescriptions = &bindingDescriptions;
+        vertexInputInfo.vertexBindingDescriptionCount = 0;
+        vertexInputInfo.vertexAttributeDescriptionCount = 0;
 
-        auto attributeDescriptions = Vertex::getAttributeDescriptions();
-        vertexInputInfo.vertexAttributeDescriptionCount = attributeDescriptions.size();
-        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly {};
         inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -684,7 +647,7 @@ class HelloWorldTriangleApp {
         rasterizer.polygonMode = VK_POLYGON_MODE_FILL; // fill or wireframe or points
         rasterizer.lineWidth = 1.0f;
         rasterizer.cullMode = VK_CULL_MODE_BACK_BIT; // backface culling
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE; // order in which triangles should be drawn
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; // order in which triangles should be drawn
         rasterizer.depthBiasEnable = VK_FALSE; // no biasing to depth values (used to fix zfighting)
 
         VkPipelineMultisampleStateCreateInfo multisampling {};
@@ -728,7 +691,7 @@ class HelloWorldTriangleApp {
         // end fixed function setup
 
 
-        /* PIPELINE LAYOUT (uniforms n stuff) */
+        /* PIPELINE LAYOUT (uniforms, etc) */
 
         // stores the layout of all the shader constants
         VkPipelineLayoutCreateInfo pipelineLayoutInfo {};
@@ -1022,8 +985,7 @@ class HelloWorldTriangleApp {
         // while mailbox is nice, we don't really expect to be rendering
         //  much faster than we display so something more basic perhaps is good for now
 
-        //return VK_PRESENT_MODE_FIFO_KHR;
-        return VK_PRESENT_MODE_MAILBOX_KHR;
+        return VK_PRESENT_MODE_FIFO_KHR;
     }
 
     VkSurfaceFormatKHR chooseSwapSurfaceMode(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
@@ -1190,7 +1152,7 @@ class HelloWorldTriangleApp {
 
     void createInstance() {
         // info about program
-        VkApplicationInfo appInfo{};
+        VkApplicationInfo appInfo {};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.pApplicationName = "Hello woooorld";
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -1199,7 +1161,7 @@ class HelloWorldTriangleApp {
         appInfo.apiVersion = VK_API_VERSION_1_3;
 
         // info about "vulkan context"
-        VkInstanceCreateInfo createInfo{};
+        VkInstanceCreateInfo createInfo {};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         createInfo.pApplicationInfo = &appInfo;
 
@@ -1287,14 +1249,8 @@ class HelloWorldTriangleApp {
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
         UniformBufferObject ubo {};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(-0.5f, 2, 1));
-        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f),
-                                    swapChainExtent.width / (float) swapChainExtent.height, 
-                                    0.1f,
-                                    10.0f);
-
-        ubo.proj[1][1] *= -1; // flip the sign on the scaling factor because OpenGL does things opposite to Vulkan
+        ubo.width = swapChainExtent.width;
+        ubo.height = swapChainExtent.height;
 
         // not super efficient, kinda like staging buffers we need push constants or whatever
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
@@ -1317,7 +1273,7 @@ class HelloWorldTriangleApp {
         long diff = currentTime.tv_nsec - lastFrame.tv_nsec;
         int fps = 1000l * 1000l * 1000l / diff;
 
-        printf("FPS/avg: %d\n", fps);
+        //printf("FPS/avg: %d\n", fps);
         
         lastFrame = currentTime;
 
@@ -1361,7 +1317,7 @@ class HelloWorldTriangleApp {
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores; // to signal when the command buffer is done
 
-        // signal inFlightFence when the queue buffer can be reused :3
+        // signal inFlightFence when the queue buffer can be reused
         if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
             throw std::runtime_error("failed to submit draw command buffer!");
         }
@@ -1389,6 +1345,8 @@ class HelloWorldTriangleApp {
         }
 
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+        //printf("%d %d \n", swapChainExtent.width, swapChainExtent.height);
     }
 
     void cleanup() {
