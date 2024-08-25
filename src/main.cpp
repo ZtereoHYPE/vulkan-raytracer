@@ -73,9 +73,12 @@ static std::vector<char> readFile(const std::string& filename) {
     return buffer;
 }
 
+// padded as defined in The 'base alignment' of the type of an OpTypeStruct member of is defined recursively as follows
 struct UniformBufferObject {
     uint32_t width;
     uint32_t height;
+    float focalLength;
+    glm::vec3 origin;
 };
 
 struct Vertex {
@@ -201,7 +204,7 @@ class HelloWorldTriangleApp {
         createSurface();    // represents the surface that will be used to display the image
         pickPhysicalDevice();   // depends on surface (device might not be able to present on a specific surface)
         createLogicalDevice();
-        createSwapChain();  // depends on device (duh)
+        createSwapChain();  // depends on device
         createImageViews();
         createRenderPass(); // we need to tell vulkan about our framebuffer attachments
         createDescriptorSetLayout();
@@ -532,8 +535,7 @@ class HelloWorldTriangleApp {
         // as many as we have swapchain images
         swapChainFramebuffers.resize(swapChainImageViews.size());
 
-        // todo: switch to size_t
-        for (uint64_t i = 0; i < swapChainImageViews.size(); i++) {
+        for (size_t i = 0; i < swapChainImageViews.size(); i++) {
             // we only have 1 attachment: the color image
             VkImageView attachments[] = {
                 swapChainImageViews[i]
@@ -616,7 +618,6 @@ class HelloWorldTriangleApp {
         // Viewport defines how the normalized device coordinates are transformed into pixel
         //  coordinates of the framebuffer -> transformation / mapping
         //  eg. setting to half the screen will squish the swapchain image to half the framebuffer
-        // todo: experiment to understand
 
         // Scissor is simply the area we can render in the frame buffer.
         //  eg. setting it to half the screen will "crop" the output (discard)
@@ -1001,7 +1002,7 @@ class HelloWorldTriangleApp {
     }
 
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
-        // todo: this is wront it would be min() lol
+        // todo: this is wrong it would be min()
         // 0xFFFFFFFF -> "the surface size/ will be determined by the extent of a swapchain targeting it"
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
             return capabilities.currentExtent;
@@ -1248,9 +1249,14 @@ class HelloWorldTriangleApp {
 
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        UniformBufferObject ubo {};
-        ubo.width = swapChainExtent.width;
-        ubo.height = swapChainExtent.height;
+        auto origin = glm::vec3(0, 0, 0);
+
+        UniformBufferObject ubo {
+            .width = swapChainExtent.width,
+            .height = swapChainExtent.height,
+            .focalLength = 1.0,
+            .origin = origin,
+        };
 
         // not super efficient, kinda like staging buffers we need push constants or whatever
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
