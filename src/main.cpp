@@ -81,6 +81,16 @@ struct UniformBufferObject {
     glm::vec3 origin;
 };
 
+struct Sphere {
+    float radius;
+    alignas(16) glm::vec3 center;
+};
+
+struct SphereShaderBufferObject {
+    uint32_t count;
+    Sphere spheres[];
+};
+
 struct Vertex {
     glm::vec2 pos;
     glm::vec3 color;
@@ -157,8 +167,8 @@ class HelloWorldTriangleApp {
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
+    //VkBuffer vertexBuffer;
+    //VkDeviceMemory vertexBufferMemory;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkQueue graphicsQueue;
     VkQueue computeQueue;
@@ -169,8 +179,11 @@ class HelloWorldTriangleApp {
     std::vector<VkCommandBuffer> commandBuffers;
     VkDescriptorSetLayout descriptorSetLayout;
     std::vector<VkBuffer> uniformBuffers;
+    std::vector<VkBuffer> shaderBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
+    std::vector<VkDeviceMemory> shaderBuffersMemory;
     std::vector<void*> uniformBuffersMapped;
+    std::vector<void*> shaderBuffersMapped;
     VkDescriptorPool descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
 
@@ -212,7 +225,8 @@ class HelloWorldTriangleApp {
         createFramebuffers();
         createCommandPool();
         createUniformBuffers();
-        createDescriptorPool();
+        createShaderBuffers();
+        createDescriptorPools();
         createDescriptorSets();
         createCommandBuffers();
         createSyncObjects();
@@ -225,42 +239,62 @@ class HelloWorldTriangleApp {
         VkDescriptorSetAllocateInfo allocInfo {};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = MAX_FRAMES_IN_FLIGHT;
+        allocInfo.descriptorSetCount = layouts.size();
         allocInfo.pSetLayouts = layouts.data();
 
-        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        descriptorSets.resize(layouts.size());
         if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
             throw std::runtime_error("Failed to allocate descriptor sets");
         }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            VkDescriptorBufferInfo bufferInfo {};
-            bufferInfo.buffer = uniformBuffers[i];
-            bufferInfo.offset = 0;
-            bufferInfo.range = VK_WHOLE_SIZE;
+            VkDescriptorBufferInfo uniformBufferInfo {};
+            uniformBufferInfo.buffer = uniformBuffers[i];
+            uniformBufferInfo.offset = 0;
+            uniformBufferInfo.range = VK_WHOLE_SIZE;
 
-            VkWriteDescriptorSet descriptorWrite {};
-            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrite.dstSet = descriptorSets[i];
-            descriptorWrite.dstBinding = 0;
-            descriptorWrite.dstArrayElement = 0;
-            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            descriptorWrite.descriptorCount = 1;
-            descriptorWrite.pBufferInfo = &bufferInfo;
+            // and one for the sbo
+            VkDescriptorBufferInfo shaderBufferInfo {};
+            shaderBufferInfo.buffer = shaderBuffers[0]; // they all point to the same buffer
+            shaderBufferInfo.offset = 0;
+            shaderBufferInfo.range = VK_WHOLE_SIZE;
 
-            vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+
+            VkWriteDescriptorSet descriptorWrites[2] = {};
+
+            // write descriptor for the uniform buffer
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = descriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].dstArrayElement = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &uniformBufferInfo;
+
+            // idem for the shader buffer
+            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[1].dstSet = descriptorSets[i];
+            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].dstArrayElement = 0;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[1].descriptorCount = 1;
+            descriptorWrites[1].pBufferInfo = &shaderBufferInfo;
+
+            vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
         }
     }
 
-    void createDescriptorPool() {
-        VkDescriptorPoolSize poolSize {};
-        poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSize.descriptorCount = MAX_FRAMES_IN_FLIGHT;
+    void createDescriptorPools() {
+        VkDescriptorPoolSize poolSize[2];
+        poolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSize[0].descriptorCount = 1; // we don't need 3 descriptors per set
+        poolSize[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        poolSize[1].descriptorCount = 1;
 
         VkDescriptorPoolCreateInfo poolInfo {};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.poolSizeCount = 2;
+        poolInfo.pPoolSizes = poolSize;
         poolInfo.maxSets = MAX_FRAMES_IN_FLIGHT; // max number of allocated descriptor sets
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
@@ -286,21 +320,48 @@ class HelloWorldTriangleApp {
         }
     }
 
-    void createDescriptorSetLayout() {
-        // we just have 1 binding and its for oour uniform buffer object
+    void createShaderBuffers() {
+        VkDeviceSize size = 1024; // 1 KB
 
+        // we just have 1 for now 
+        shaderBuffers.resize(1);
+        shaderBuffersMapped.resize(1);
+        shaderBuffersMemory.resize(1);
+
+        createBuffer(size, 
+                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
+                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                        shaderBuffers[0], 
+                        shaderBuffersMemory[0]);
+
+        vkMapMemory(device, shaderBuffersMemory[0], 0, VK_WHOLE_SIZE, 0, &shaderBuffersMapped[0]);
+    }
+
+    void createDescriptorSetLayout() {
         // resource descriptors in vulkan represent free access to resources in shaders such as textures or uniforms
         VkDescriptorSetLayoutBinding uboLayoutBinding {};
         uboLayoutBinding.binding = 0;
-        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // ubo
         uboLayoutBinding.descriptorCount = 1;
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT; // this is going to be accessible in both stages (change to only fragment)
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT; // only for fragmnet
         uboLayoutBinding.pImmutableSamplers = nullptr;
+
+        // despite multiple of these descriptor sets existing, they're all gonna be pointing to the same buffer.
+        VkDescriptorSetLayoutBinding sboLayoutBinding {};
+        sboLayoutBinding.binding = 1;
+        sboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER; // shader buffer objects
+        sboLayoutBinding.descriptorCount = 1;
+        sboLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT; // only for fragment
+        sboLayoutBinding.pImmutableSamplers = nullptr;
+
+        std::vector<VkDescriptorSetLayoutBinding> bindings = {
+            uboLayoutBinding, sboLayoutBinding
+        };
 
         VkDescriptorSetLayoutCreateInfo layoutInfo {};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &uboLayoutBinding;
+        layoutInfo.bindingCount = bindings.size();
+        layoutInfo.pBindings = bindings.data();
 
         if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor set layout");
@@ -325,7 +386,7 @@ class HelloWorldTriangleApp {
 
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-        VkBufferCopy copyRegion{};
+        VkBufferCopy copyRegion {};
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = 0; // we have no offsets
         copyRegion.size = size;
@@ -574,8 +635,8 @@ class HelloWorldTriangleApp {
 
         /* SHADERS */
 
-        auto vertexShaderSrc = readFile("build/shaders/shader.vert.spv");
-        auto fragmentShaderSrc = readFile("build/shaders/shader.frag.spv");
+        auto vertexShaderSrc = readFile("build/shaders/main.vert.spv");
+        auto fragmentShaderSrc = readFile("build/shaders/main.frag.spv");
 
         // these are just a thin wrapper around the SPIR-V bytecode
         VkShaderModule vertexShader = createShaderModule(vertexShaderSrc);
@@ -682,7 +743,7 @@ class HelloWorldTriangleApp {
         colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
         colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
 
-        // wraps around "all of our blending operattions" for all framebuffers
+        // wraps around "all of our blending operations" for all framebuffers
         VkPipelineColorBlendStateCreateInfo colorBlending {};
         colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         colorBlending.logicOpEnable = VK_FALSE; // whether we just want to blend our buffer using bitwise operations
@@ -1063,6 +1124,7 @@ class HelloWorldTriangleApp {
         QueueFamilyIndices familyIndexes = findQueueFamilies(device);
 
         bool suitable = familyIndexes.isComplete() && swapChainAdequate;
+        //bool suitable = !strcmp(deviceProperties.deviceName, "llvmpipe (LLVM 18.1.6, 256 bits)"); //todo: get rid of this
         //bool suitable = isDiscrete && familyIndexes.isComplete() && swapChainAdequate;
 
         if (suitable) {
@@ -1254,7 +1316,7 @@ class HelloWorldTriangleApp {
         UniformBufferObject ubo {
             .width = swapChainExtent.width,
             .height = swapChainExtent.height,
-            .focalLength = 1.0,
+            .focalLength = -1.5,
             .origin = origin,
         };
 
@@ -1262,7 +1324,21 @@ class HelloWorldTriangleApp {
         memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 
+    void pushWorldData() {
+        SphereShaderBufferObject* sbo = reinterpret_cast<SphereShaderBufferObject*>(shaderBuffersMapped[0]);
+
+        sbo->count = 3;
+        sbo->spheres[0].center = glm::vec3(0.0, 0.0, 5.0);
+        sbo->spheres[0].radius = 1.5;
+        sbo->spheres[1].center = glm::vec3(1.1, 1.0, 3.0);
+        sbo->spheres[1].radius = 0.25;
+        sbo->spheres[2].center = glm::vec3(0.0, -107.0, 0.0);
+        sbo->spheres[2].radius = 100.0;
+    }
+
     void mainLoop() {
+        pushWorldData();
+
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
             drawFrame();
@@ -1367,15 +1443,15 @@ class HelloWorldTriangleApp {
             vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
         }
 
+        vkDestroyBuffer(device, shaderBuffers[0], nullptr);
+        vkFreeMemory(device, shaderBuffersMemory[0], nullptr);
+
         vkDestroyCommandPool(device, commandPool, nullptr);
 
         cleanupSwapChain();
 
         vkDestroyDescriptorPool(device,  descriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
-
-        vkDestroyBuffer(device, vertexBuffer, nullptr);
-        vkFreeMemory(device, vertexBufferMemory, nullptr);
 
         vkDestroyPipeline(device, graphicsPipeline, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);

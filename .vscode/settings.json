@@ -64,5 +64,24 @@
     "C_Cpp.formatting": "clangFormat",
     "C_Cpp.clang_format_sortIncludes": true,
     "C_Cpp.clang_format_fallbackStyle": "Google",
-    "C_Cpp.clang_format_style": "file:/home/ztereohype/.clang-format"
+    "C_Cpp.clang_format_style": "file:/home/ztereohype/.clang-format",
+    "glsllint.languageSettings": {
+        "javascript": {
+            "parser": "TSAST"
+        },
+        "javascriptreact": {
+            "parser": "TSAST"
+        },
+        "typescript": {
+            "parser": "TSAST"
+        },
+        "typescriptreact": {
+            "parser": "TSAST"
+        },
+        "elm": {
+            "parser": "REGEX",
+            "patternStart": "\\[glsl",
+            "patternEnd": "\\|\\]"
+        }
+    }
 }
