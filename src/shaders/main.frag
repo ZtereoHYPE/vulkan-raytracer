@@ -100,20 +100,12 @@ HitRecord hit_sphere(Sphere sphere, Ray ray) {
 void main() {
     Ray ray = calculate_ray(gl_FragCoord.xy);
 
-    //Sphere sphere;
-    //sphere.center = vec3(0, 0, 2.9);
-    //sphere.radius = 1.0;
-
-
     HitRecord closest_hit;
     closest_hit.t = 1.0 / 0.0; // infinity
     closest_hit.has_hit = false;
 
     for (int i = 0; i < sphere_sbo.count; i++) {
-    //for (int i = 0; i < 1; i++) {
         HitRecord hit = hit_sphere(sphere_sbo.spheres[i], ray);
-        //HitRecord hit = hit_sphere(sphere, ray);
-
 
         if (hit.has_hit && hit.t < closest_hit.t) {
             closest_hit = hit;
@@ -126,7 +118,4 @@ void main() {
     } else {
         out_color = vec4(background_color(ray), 1.0);
     }
-
-    //out_color = vec4(vec3(sphere_sbo.spheres[0].radius), 1.0);
-    //out_color = vec4(sphere_sbo.spheres[0].center, 1.0);
 }
