@@ -75,8 +75,8 @@ static std::vector<char> readFile(const std::string& filename) {
 
 // padded as defined in The 'base alignment' of the type of an OpTypeStruct member of is defined recursively as follows
 struct UniformBufferObject {
-    uint32_t width;
-    uint32_t height;
+    glm::vec2 resolution;
+    glm::vec2 viewportUv;
     float focalLength;
     glm::vec3 origin;
 };
@@ -1313,10 +1313,23 @@ class HelloWorldTriangleApp {
 
         auto origin = glm::vec3(0, 0, 0);
 
+        float ratio = swapChainExtent.width / (float) swapChainExtent.height;
+        float u, v;
+
+        if (ratio > 1) {
+            u = ratio;
+            v = 1;
+        } else {
+            u = 1;
+            v = 1/ratio;
+        }
+
+        float size = 2.0;
+
         UniformBufferObject ubo {
-            .width = swapChainExtent.width,
-            .height = swapChainExtent.height,
-            .focalLength = -1.5,
+            .resolution = glm::vec2(swapChainExtent.width, swapChainExtent.height),
+            .viewportUv = glm::vec2(u, v) * size,
+            .focalLength = 1.5,
             .origin = origin,
         };
 
@@ -1355,7 +1368,7 @@ class HelloWorldTriangleApp {
         long diff = currentTime.tv_nsec - lastFrame.tv_nsec;
         int fps = 1000l * 1000l * 1000l / diff;
 
-        //printf("FPS/avg: %d\n", fps);
+        printf("FPS/avg: %d\n", fps);
         
         lastFrame = currentTime;
 

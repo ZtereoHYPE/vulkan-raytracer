@@ -17,13 +17,14 @@ struct Sphere {
 
 // todo: look into inline uniform buffers for speed and small data
 // todo: alternatively, look into push constants
-layout(set = 0, binding = 0) uniform CameraUBO {
-    uint width;
-    uint height;
+layout(std140, set = 0, binding = 0) uniform CameraUBO {
+    vec2 resolution;
+    vec2 uv;
     float focal_len;
-
-    vec3 origin; // should these two be merged
+    vec3 origin;
 } camera;
+
+#define SAMPLES 8
 
 layout(std140, set = 0, binding = 1) readonly buffer SphereSBO {
     uint count;
@@ -33,18 +34,29 @@ layout(std140, set = 0, binding = 1) readonly buffer SphereSBO {
 layout(location = 0) out vec4 out_color;
 
 Ray calculate_ray(vec2 frag_coord) {
-    Ray ray;
 
-    // this shouldn't impact peformance too much as there's zero branch divergence
-    // at the same time, a lot of this math is identical for each pixel so it could be moved to a uniform to avoid divisions
-    float ratio = float(camera.width) / float(camera.height);
-    if (ratio > 1) {
-        ray.direction = vec3(((frag_coord.x / camera.height)*2-ratio), -((frag_coord.y / camera.height)*2-1), -camera.focal_len);
-    } else {
-        ray.direction = vec3(((frag_coord.x / camera.width)*2-1), -((frag_coord.y / camera.width)*2-(1/ratio)), -camera.focal_len);
-    }
-    
-    ray.direction = normalize(ray.direction);
+    /*  We are starting from -uv/2 on each axys, and we need to reach +uv/2.
+        Expressed as a formula:
+            -uv/2 + pixel_delta * res = +uv/2
+            pixel_delta = uv / res
+
+        The Y component is inverted because as the pixels' y axys grows in value
+        we want to descend in the 3D space.
+
+        Some of this could be moved to the CPU as a uniform, but is left here
+        for now for clarity and because the performance impact is minor.
+    */
+    vec2 pixel_delta = camera.uv/camera.resolution;
+    pixel_delta *= vec2(1, -1);
+
+    vec3 pixel_origin = vec3(-camera.uv.x/2, camera.uv.y/2, camera.focal_len) + // the top left is at x=-u but y=v (up is +)
+                        camera.origin +  // to place it correctly in world-space
+                        vec3(pixel_delta/2, 0);  // to center the pixel
+                        
+    vec3 pixel_center = pixel_origin + vec3(pixel_delta * frag_coord, 0);
+
+    Ray ray;
+    ray.direction = normalize(pixel_center - camera.origin); // vector from origin to center
     ray.origin = camera.origin;
 
     return ray;
@@ -52,12 +64,11 @@ Ray calculate_ray(vec2 frag_coord) {
 
 vec3 background_color(Ray ray) {
     float blend = 0.5 * ray.direction.y + 0.5;
-    return mix(vec3(0.8,0.9,1), vec3(0.5, 0.7, 1.0), blend);
+    return mix(vec3(0.6, 0.8, 1.0), vec3(0.2, 0.4, 1.0), blend);
 }
 
 HitRecord hit_sphere(Sphere sphere, Ray ray) {
-    /*  
-        line (parametric):
+    /*  line (parametric):
             x = orig_x + dir_x * t
             y = orig_y + dir_y * t   ->   p = orig + dir * t
             z = orig_z + dir_z * t
@@ -110,7 +121,6 @@ void main() {
         if (hit.has_hit && hit.t < closest_hit.t) {
             closest_hit = hit;
         }
-        out_color = vec4(sphere_sbo.count / 10.0, 0.0, 0.0, 1.0);
     }
     
     if (closest_hit.has_hit) {
