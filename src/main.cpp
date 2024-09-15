@@ -78,11 +78,14 @@ struct UniformBufferObject {
     glm::vec2 resolution;
     glm::vec2 viewportUv;
     float focalLength;
+    uint time;
     glm::vec3 origin;
 };
 
 struct Sphere {
     float radius;
+    bool emissive;
+    alignas(16) glm::vec3 color;
     alignas(16) glm::vec3 center;
 };
 
@@ -1330,6 +1333,7 @@ class HelloWorldTriangleApp {
             .resolution = glm::vec2(swapChainExtent.width, swapChainExtent.height),
             .viewportUv = glm::vec2(u, v) * size,
             .focalLength = 1.5,
+            .time = currentFrame,
             .origin = origin,
         };
 
@@ -1340,13 +1344,26 @@ class HelloWorldTriangleApp {
     void pushWorldData() {
         SphereShaderBufferObject* sbo = reinterpret_cast<SphereShaderBufferObject*>(shaderBuffersMapped[0]);
 
-        sbo->count = 3;
-        sbo->spheres[0].center = glm::vec3(0.0, 0.0, 5.0);
+        sbo->count = 4;
+        sbo->spheres[0].center = glm::vec3(3.0, 0.5, 5.0);
         sbo->spheres[0].radius = 1.5;
-        sbo->spheres[1].center = glm::vec3(1.1, 1.0, 3.0);
-        sbo->spheres[1].radius = 0.25;
-        sbo->spheres[2].center = glm::vec3(0.0, -107.0, 0.0);
-        sbo->spheres[2].radius = 100.0;
+        sbo->spheres[0].emissive = false;
+        sbo->spheres[0].color = glm::vec3(0.99, 0.43, 0.33);
+
+        sbo->spheres[1].center = glm::vec3(0.0, 0.0, 5.0);
+        sbo->spheres[1].radius = 1.0;
+        sbo->spheres[1].emissive = false;
+        sbo->spheres[1].color = glm::vec3(0.48, 0.62, 0.89);
+
+        sbo->spheres[2].center = glm::vec3(0.0, -100.0, 5.0);
+        sbo->spheres[2].radius = 99.0;
+        sbo->spheres[2].emissive = false;
+        sbo->spheres[2].color = glm::vec3(0.89, 0.7, 0.48);
+
+        sbo->spheres[3].center = glm::vec3(-500.0, 200.0, 700.0);
+        sbo->spheres[3].radius = 200.0;
+        sbo->spheres[3].emissive = true;
+        sbo->spheres[3].color = glm::vec3(1, 0.99, 0.9);
     }
 
     void mainLoop() {
@@ -1368,7 +1385,7 @@ class HelloWorldTriangleApp {
         long diff = currentTime.tv_nsec - lastFrame.tv_nsec;
         int fps = 1000l * 1000l * 1000l / diff;
 
-        printf("FPS/avg: %d\n", fps);
+        //printf("FPS/avg: %d\n", fps);
         
         lastFrame = currentTime;
 

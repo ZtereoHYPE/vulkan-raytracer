@@ -1,40 +1,49 @@
 #version 460
 
+//#define ANTIALIAS_SAMPLES // must be combined with 4 samples
+#define SAMPLES 256
+#define BOUNCES 8
+
 #extension GL_GOOGLE_include_directive : enable
 #include "imports/ray.frag"
+#include "imports/util.frag"
 
 struct HitRecord {
-    bool has_hit;
+    bool did_hit;
+    bool emissive;
     vec3 pos;
     vec3 normal;
+    vec3 color;
     float t;
 };
 
 struct Sphere {
     float radius;
+    bool emissive;
+    vec3 color;
     vec3 center;
 };
 
 // todo: look into inline uniform buffers for speed and small data
 // todo: alternatively, look into push constants
 layout(std140, set = 0, binding = 0) uniform CameraUBO {
-    vec2 resolution;
+    vec2 resolution; // todo: move this to (unsinged) integers
     vec2 uv;
     float focal_len;
+    uint frame;
     vec3 origin;
 } camera;
 
-#define SAMPLES 8
-
-layout(std140, set = 0, binding = 1) readonly buffer SphereSBO {
+layout(set = 0, binding = 1) readonly buffer SphereSBO {
     uint count;
     Sphere spheres[];
 } sphere_sbo;
 
 layout(location = 0) out vec4 out_color;
 
-Ray calculate_ray(vec2 frag_coord) {
+uint seed;
 
+Ray calculate_ray(vec2 frag_coord) {
     /*  We are starting from -uv/2 on each axys, and we need to reach +uv/2.
         Expressed as a formula:
             -uv/2 + pixel_delta * res = +uv/2
@@ -52,19 +61,17 @@ Ray calculate_ray(vec2 frag_coord) {
     vec3 pixel_origin = vec3(-camera.uv.x/2, camera.uv.y/2, camera.focal_len) + // the top left is at x=-u but y=v (up is +)
                         camera.origin +  // to place it correctly in world-space
                         vec3(pixel_delta/2, 0);  // to center the pixel
-                        
-    vec3 pixel_center = pixel_origin + vec3(pixel_delta * frag_coord, 0);
+
+    // get a random offset for anti-aliasing
+    vec2 offset = random_square_offset(seed);
+    vec3 pixel_sample = pixel_origin + 
+                        vec3(pixel_delta * (frag_coord + offset), 0);
 
     Ray ray;
-    ray.direction = normalize(pixel_center - camera.origin); // vector from origin to center
+    ray.direction = normalize(pixel_sample - camera.origin); // vector from origin to pixel
     ray.origin = camera.origin;
 
     return ray;
-}
-
-vec3 background_color(Ray ray) {
-    float blend = 0.5 * ray.direction.y + 0.5;
-    return mix(vec3(0.6, 0.8, 1.0), vec3(0.2, 0.4, 1.0), blend);
 }
 
 HitRecord hit_sphere(Sphere sphere, Ray ray) {
@@ -96,36 +103,85 @@ HitRecord hit_sphere(Sphere sphere, Ray ray) {
     float c = dot(delta, delta) - sphere.radius * sphere.radius;
 
     float discriminant = b*b - 4*a*c;
-    // todo: is there a better way to do the sqrt here? is it even a bottleneck?
     float t = (-b - sqrt(discriminant)) / 2*a;
 
     HitRecord hit;
+
     hit.t = t;
-    hit.has_hit = !(discriminant < 0 || t < 0);
     hit.pos = ray_at(ray, t);
     hit.normal = normalize(hit.pos - sphere.center);
+    hit.color = sphere.color;
+    hit.emissive = sphere.emissive;
+
+    bool did_not_hit = discriminant < 0;
+    bool is_inside = dot(hit.normal, ray.direction) > 0;
+    bool is_behind = t < 0;
+
+    hit.did_hit = !(did_not_hit || is_behind || is_inside);
 
     return hit;
 }
 
-void main() {
-    Ray ray = calculate_ray(gl_FragCoord.xy);
+vec3 background_color(Ray ray) {
+    float blend = 0.5 * ray.direction.y + 0.5;
+    //return mix(vec3(0.6, 0.8, 1.0), vec3(0.2, 0.4, 1.0), blend);
+    return vec3(0);
+}
 
-    HitRecord closest_hit;
-    closest_hit.t = 1.0 / 0.0; // infinity
-    closest_hit.has_hit = false;
 
-    for (int i = 0; i < sphere_sbo.count; i++) {
-        HitRecord hit = hit_sphere(sphere_sbo.spheres[i], ray);
+vec3 ray_color(Ray ray) {
+    /*  The ray only gets light when it hits something emissive.
+        The light that will be "received" from the emissive object
+         will be tinted multiplicatively by all the surfaces the ray
+         hits before reaching the camera.
+        If the ray encounters multiple source of light, all of them
+         will contribute to the light value of the pixel.
 
-        if (hit.has_hit && hit.t < closest_hit.t) {
-            closest_hit = hit;
+        The result is that we only add light to incoming_light when
+         we hit an emissive, and we tint that light to the color that 
+         the ray has assumed so far.
+    */
+    vec3 ray_color = vec3(1);
+    vec3 incoming_light = vec3(0);
+
+    for (int bounce = 0; bounce < BOUNCES + 1; bounce++) {
+        HitRecord hit;
+        hit.t = 1.0 / 0.0; // infinity
+        hit.did_hit = false;
+
+        for (int i = 0; i < sphere_sbo.count; i++) {
+            HitRecord current_hit = hit_sphere(sphere_sbo.spheres[i], ray);
+
+            if (current_hit.did_hit && current_hit.t < hit.t) {
+                hit = current_hit;
+            }
         }
+
+        if (hit.did_hit) {
+            ray_color *= hit.color;
+            incoming_light += hit.emissive ? ray_color * 10 : vec3(0.0);
+        } else {
+            incoming_light += background_color(ray) * ray_color;
+            break;
+        }
+
+        ray.origin = hit.pos;
+        ray.direction = random_unit_in_hemisphere(seed, hit.normal);
     }
-    
-    if (closest_hit.has_hit) {
-        out_color = vec4(closest_hit.normal*0.5 + vec3(0.5), 1.0);
-    } else {
-        out_color = vec4(background_color(ray), 1.0);
+
+    return incoming_light;
+}
+
+void main() {
+    // initialize random seed
+    seed = uint(gl_FragCoord.x + camera.resolution.x * gl_FragCoord.y + camera.frame * 4321u);
+
+    vec3 color = vec3(0);
+    for (int i = 0; i < SAMPLES; i++) {
+        Ray ray = calculate_ray(gl_FragCoord.xy);
+
+        color += ray_color(ray) / float(SAMPLES);
     }
+
+    out_color = vec4(color, 1.0);
 }
