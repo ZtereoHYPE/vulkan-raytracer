@@ -8,6 +8,7 @@ SHADER_COMPILER := glslc
 SRC_DIR := src
 BUILD_DIR := build
 SHADER_DIR := src/shaders
+SUBDIR_SHADER_FILES := $(shell find $(SHADER_DIR) -mindepth 2 -name "*.vert" -o -name "*.frag")
 SHADER_BUILD_DIR := build/shaders
 
 # Source files
@@ -33,11 +34,11 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(SHADER_BUILD_DIR)/%.vert.spv: $(SHADER_DIR)/%.vert
+$(SHADER_BUILD_DIR)/%.vert.spv: $(SHADER_DIR)/%.vert $(SUBDIR_SHADER_FILES)
 	@mkdir -p $(SHADER_BUILD_DIR)
 	$(SHADER_COMPILER) $< -o $@
 
-$(SHADER_BUILD_DIR)/%.frag.spv: $(SHADER_DIR)/%.frag
+$(SHADER_BUILD_DIR)/%.frag.spv: $(SHADER_DIR)/%.frag $(SUBDIR_SHADER_FILES)
 	@mkdir -p $(SHADER_BUILD_DIR)
 	$(SHADER_COMPILER) $< -o $@
 
