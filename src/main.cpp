@@ -170,8 +170,6 @@ class HelloWorldTriangleApp {
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
-    //VkBuffer vertexBuffer;
-    //VkDeviceMemory vertexBufferMemory;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkQueue graphicsQueue;
     VkQueue computeQueue;
@@ -191,6 +189,7 @@ class HelloWorldTriangleApp {
     std::vector<VkDescriptorSet> descriptorSets;
 
     uint32_t currentFrame = 0;
+    uint32_t frameCounter = 0;
     bool framebufferResized = false; // just in case the vulkan impl is annoying
     timespec lastFrame;
 
@@ -804,7 +803,6 @@ class HelloWorldTriangleApp {
     }
 
     void createRenderPass() {
-        // todo: fact-check when more understand
         // Everything in vulkan is drawn thru render passes made of steps called sub-passes
         //  that our commands "can invoke".
         // Attachments are input/output data and images used in a sub-pass.
@@ -1126,9 +1124,9 @@ class HelloWorldTriangleApp {
 
         QueueFamilyIndices familyIndexes = findQueueFamilies(device);
 
-        bool suitable = familyIndexes.isComplete() && swapChainAdequate;
+        //bool suitable = familyIndexes.isComplete() && swapChainAdequate;
         //bool suitable = !strcmp(deviceProperties.deviceName, "llvmpipe (LLVM 18.1.6, 256 bits)"); //todo: get rid of this
-        //bool suitable = isDiscrete && familyIndexes.isComplete() && swapChainAdequate;
+        bool suitable = isDiscrete && familyIndexes.isComplete() && swapChainAdequate;
 
         if (suitable) {
             printf("\tFound suitable physical device: %s\n", deviceProperties.deviceName);
@@ -1333,7 +1331,7 @@ class HelloWorldTriangleApp {
             .resolution = glm::vec2(swapChainExtent.width, swapChainExtent.height),
             .viewportUv = glm::vec2(u, v) * size,
             .focalLength = 1.5,
-            .time = currentFrame,
+            .time = frameCounter,
             .origin = origin,
         };
 
@@ -1457,8 +1455,7 @@ class HelloWorldTriangleApp {
         }
 
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-
-        //printf("%d %d \n", swapChainExtent.width, swapChainExtent.height);
+        frameCounter++;
     }
 
     void cleanup() {

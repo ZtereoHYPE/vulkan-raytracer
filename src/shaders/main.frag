@@ -1,7 +1,6 @@
 #version 460
 
-//#define ANTIALIAS_SAMPLES // must be combined with 4 samples
-#define SAMPLES 256
+#define SAMPLES 64
 #define BOUNCES 8
 
 #extension GL_GOOGLE_include_directive : enable
@@ -20,9 +19,17 @@ struct HitRecord {
 struct Sphere {
     float radius;
     bool emissive;
+    //float reflectance;
     vec3 color;
     vec3 center;
 };
+
+//struct Material {
+//    vec3 base_color;
+//    vec3 emissive_color;
+//    float reflectance;
+    
+//}
 
 // todo: look into inline uniform buffers for speed and small data
 // todo: alternatively, look into push constants
@@ -124,8 +131,7 @@ HitRecord hit_sphere(Sphere sphere, Ray ray) {
 
 vec3 background_color(Ray ray) {
     float blend = 0.5 * ray.direction.y + 0.5;
-    //return mix(vec3(0.6, 0.8, 1.0), vec3(0.2, 0.4, 1.0), blend);
-    return vec3(0);
+    return mix(vec3(0.6, 0.8, 1.0), vec3(0.2, 0.4, 1.0), blend);
 }
 
 
@@ -173,8 +179,8 @@ vec3 ray_color(Ray ray) {
 }
 
 void main() {
-    // initialize random seed
-    seed = uint(gl_FragCoord.x + camera.resolution.x * gl_FragCoord.y + camera.frame * 4321u);
+    // initialize "random" seed
+    seed = uint(gl_FragCoord.x + camera.resolution.x * gl_FragCoord.y + camera.frame * 472u);
 
     vec3 color = vec3(0);
     for (int i = 0; i < SAMPLES; i++) {
@@ -183,5 +189,5 @@ void main() {
         color += ray_color(ray) / float(SAMPLES);
     }
 
-    out_color = vec4(color, 1.0);
+    out_color = vec4(color, 1.0); //todo: gamma correction?
 }
