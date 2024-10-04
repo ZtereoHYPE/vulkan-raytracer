@@ -1,24 +1,4 @@
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-#include <string.h>
-#include <cstdlib>
-#include <iostream>
-#include <optional>
-#include <set>
-#include <stdexcept>
-#include <vector>
-#include <limits> 
-#include <algorithm>
-#include <new>
-#include <fstream>
-#include <sys/time.h>
-#include <glm/glm.hpp>
-#include <array>
-#include <cstddef>
-#define GLM_FORCE_RADIANS
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <chrono>
+#include "main.hpp"
 
 const uint32_t WIDTH = 400;
 const uint32_t HEIGHT = 300;
@@ -56,96 +36,40 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
-static std::vector<char> readFile(const std::string& filename) {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+std::array<VkVertexInputAttributeDescription, 2> Vertex::getAttributeDescriptions() {
+            std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions {};
 
-    if (!file.is_open()) {
-        throw std::runtime_error("failed to open file!");
-    }
+    attributeDescriptions[0].binding = 0;
+    attributeDescriptions[0].location = 0;
+    attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[0].offset = offsetof(Vertex, pos);
 
-    size_t fileSize = (size_t) file.tellg();
-    std::vector<char> buffer(fileSize);
+    attributeDescriptions[1].binding = 0;
+    attributeDescriptions[1].location = 1;
+    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[1].offset = offsetof(Vertex, color);
 
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
-
-    return buffer;
+    return attributeDescriptions;
 }
 
-// padded as defined in The 'base alignment' of the type of an OpTypeStruct member of is defined recursively as follows
-struct UniformBufferObject {
-    glm::vec2 resolution;
-    glm::vec2 viewportUv;
-    float focalLength;
-    uint time;
-    glm::vec3 origin;
-};
+VkVertexInputBindingDescription Vertex::getBindingDescription() {
+    VkVertexInputBindingDescription bindingDescription {};
+    bindingDescription.binding = 0; 
+    bindingDescription.stride = sizeof(Vertex);
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX; // move to the next data after each vertex and not instance
 
-struct Sphere {
-    float radius;
-    bool emissive;
-    alignas(16) glm::vec3 color;
-    alignas(16) glm::vec3 center;
-};
+    return bindingDescription; 
+}
 
-struct SphereShaderBufferObject {
-    uint32_t count;
-    Sphere spheres[];
-};
+bool QueueFamilyIndices::isComplete() {
+    return graphicsFamily.has_value() && computeFamily.has_value() && presentFamily.has_value();
+}
 
-struct Vertex {
-    glm::vec2 pos;
-    glm::vec3 color;
-
-    // describes the rate at which to load data from memory thru vertices (vertex format)
-    // here we decide that this will be bound at 0 and be of size X per vertex
-    static VkVertexInputBindingDescription getBindingDescription() {
-        VkVertexInputBindingDescription bindingDescription {};
-        bindingDescription.binding = 0; 
-        bindingDescription.stride = sizeof(Vertex);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX; // move to the next data after each vertex and not instance
-
-        return bindingDescription; 
-    }
-
-    // describes the layout of the attributes for each vertex
-    // here we specify how to read the various attributes we need for our bound buffers
-    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions {};
-
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-        return attributeDescriptions;
-    }
-};
-
-struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;
-    std::optional<uint32_t> computeFamily;
-    std::optional<uint32_t> presentFamily;
-
-    bool isComplete() { return graphicsFamily.has_value() && computeFamily.has_value() && presentFamily.has_value(); }
-};
-
-struct SwapChainSupportDetails {
-    VkSurfaceCapabilitiesKHR capabilities;
-    std::vector<VkSurfaceFormatKHR> formats;
-    std::vector<VkPresentModeKHR> presentModes;
-};
 
 class HelloWorldTriangleApp {
    public:
     void run() {
-        initWindow();
+        window.setResizedCallbackVariable(&framebufferResized);
         initVulkan();
         mainLoop();
         cleanup();
@@ -153,7 +77,9 @@ class HelloWorldTriangleApp {
 
    private:
     // glfw stuff
-    GLFWwindow* window;
+    //GLFWwindow* window;
+    //GLFWwindow* window;
+    Window window = Window("Vulkan", WIDTH, HEIGHT);
 
     // we need to manage these
     VkInstance instance;
@@ -193,21 +119,6 @@ class HelloWorldTriangleApp {
     bool framebufferResized = false; // just in case the vulkan impl is annoying
     timespec lastFrame;
 
-    void initWindow() {
-        glfwInit();
-
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        //glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-
-        window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
-
-        glfwSetWindowUserPointer(window, this);
-
-        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-
-        clock_gettime(CLOCK_REALTIME, &lastFrame);
-    }
-
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto app = reinterpret_cast<HelloWorldTriangleApp*>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
@@ -216,7 +127,8 @@ class HelloWorldTriangleApp {
     void initVulkan() {
         createInstance();
         setupDebugMessenger();
-        createSurface();    // represents the surface that will be used to display the image
+        //createSurface();    // represents the surface that will be used to display the image
+        surface = createVulkanWindowSurface(&window, instance);
         pickPhysicalDevice();   // depends on surface (device might not be able to present on a specific surface)
         createLogicalDevice();
         createSwapChain();  // depends on device
@@ -232,6 +144,63 @@ class HelloWorldTriangleApp {
         createDescriptorSets();
         createCommandBuffers();
         createSyncObjects();
+    }
+
+    void createInstance() {
+        // info about program
+        VkApplicationInfo appInfo {};
+        appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        appInfo.pApplicationName = "Hello woooorld";
+        appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+        appInfo.pEngineName = "No Engine";
+        appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+        appInfo.apiVersion = VK_API_VERSION_1_3;
+
+        // info about "vulkan context"
+        VkInstanceCreateInfo createInfo {};
+        createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        createInfo.pApplicationInfo = &appInfo;
+
+        auto requiredExts = getRequiredExtensions();
+
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExts.size());
+        createInfo.ppEnabledExtensionNames = requiredExts.data();
+
+        // validation layers
+        if (enableValidationLayers) {
+            if (!allValidationLayersSupported()) {
+                throw new std::runtime_error("Some validation layers i need aren't supported");
+            }
+
+            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+            createInfo.ppEnabledLayerNames = validationLayers.data();
+        } else {
+            createInfo.enabledLayerCount = 0;
+        }
+
+        // create actual instance
+        //VkInstance instance;
+        if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create instance!");
+        }
+
+        printf("Made instance wtih %d extensions!\n", (int)requiredExts.size());
+
+        //return instance;
+    }
+
+    std::vector<const char*> getRequiredExtensions() {
+        uint32_t count = 0;
+        const char** glfwExtensions;
+        glfwExtensions = glfwGetRequiredInstanceExtensions(&count);
+
+        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + count);
+
+        if (enableValidationLayers) {
+            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        }
+
+        return extensions;
     }
 
     void createDescriptorSets() {
@@ -455,10 +424,10 @@ class HelloWorldTriangleApp {
     void recreateSwapChain() {
         // we could be minimized, in which case do nothing until we no longer are
         int width = 0, height = 0;
-        glfwGetFramebufferSize(window, &width, &height);
+        window.getFramebufferSize(&width, &height);
         while (width == 0 || height == 0) {
             glfwWaitEvents();
-            glfwGetFramebufferSize(window, &width, &height);// should these be flipped?
+            window.getFramebufferSize(&width, &height);// should these be flipped?
         }
 
         vkDeviceWaitIdle(device);
@@ -962,13 +931,6 @@ class HelloWorldTriangleApp {
         printf("\t present mode: %d\n", presentMode);
     }
 
-    void createSurface() {
-        if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
-            std::runtime_error("Failed to create window surface!!!!!!");
-        }
-        printf("Created window surface.\n");
-    }
-
     void createLogicalDevice() {
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 
@@ -1070,7 +1032,7 @@ class HelloWorldTriangleApp {
             return capabilities.currentExtent;
         } else {
             int width, height;
-            glfwGetFramebufferSize(window, &width, &height);
+            window.getFramebufferSize(&width, &height);
 
             VkExtent2D actualExtent = {
                 static_cast<uint32_t>(width),
@@ -1124,9 +1086,9 @@ class HelloWorldTriangleApp {
 
         QueueFamilyIndices familyIndexes = findQueueFamilies(device);
 
-        //bool suitable = familyIndexes.isComplete() && swapChainAdequate;
+        bool suitable = familyIndexes.isComplete() && swapChainAdequate;
         //bool suitable = !strcmp(deviceProperties.deviceName, "llvmpipe (LLVM 18.1.6, 256 bits)"); //todo: get rid of this
-        bool suitable = isDiscrete && familyIndexes.isComplete() && swapChainAdequate;
+        //bool suitable = isDiscrete && familyIndexes.isComplete() && swapChainAdequate;
 
         if (suitable) {
             printf("\tFound suitable physical device: %s\n", deviceProperties.deviceName);
@@ -1214,59 +1176,9 @@ class HelloWorldTriangleApp {
         printf("Enabled all validation layers. NOTE: Instance creation is not covered!\n");
     }
 
-    void createInstance() {
-        // info about program
-        VkApplicationInfo appInfo {};
-        appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName = "Hello woooorld";
-        appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.pEngineName = "No Engine";
-        appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_3;
 
-        // info about "vulkan context"
-        VkInstanceCreateInfo createInfo {};
-        createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        createInfo.pApplicationInfo = &appInfo;
 
-        auto requiredExts = getRequiredExtensions();
 
-        createInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExts.size());
-        createInfo.ppEnabledExtensionNames = requiredExts.data();
-
-        // validation layers
-        if (enableValidationLayers) {
-            if (!allValidationLayersSupported()) {
-                throw new std::runtime_error("Some validation layers i need aren't supported");
-            }
-
-            createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-            createInfo.ppEnabledLayerNames = validationLayers.data();
-        } else {
-            createInfo.enabledLayerCount = 0;
-        }
-
-        // create actual instance
-        if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create instance!");
-        }
-
-        printf("Made instance wtih %d extensions!\n", (int)requiredExts.size());
-    }
-
-    std::vector<const char*> getRequiredExtensions() {
-        uint32_t count = 0;
-        const char** glfwExtensions;
-        glfwExtensions = glfwGetRequiredInstanceExtensions(&count);
-
-        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + count);
-
-        if (enableValidationLayers) {
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        }
-
-        return extensions;
-    }
 
     bool allValidationLayersSupported() {
         uint32_t layerCount;
@@ -1367,7 +1279,7 @@ class HelloWorldTriangleApp {
     void mainLoop() {
         pushWorldData();
 
-        while (!glfwWindowShouldClose(window)) {
+        while (!window.shouldClose()) {
             glfwPollEvents();
             drawFrame();
         }
@@ -1375,7 +1287,8 @@ class HelloWorldTriangleApp {
         // wait until all submitted stuff is done
         vkDeviceWaitIdle(device);
     }
-
+    
+    
     void drawFrame() {
         timespec currentTime;
         clock_gettime(CLOCK_REALTIME, &currentTime);
@@ -1491,9 +1404,6 @@ class HelloWorldTriangleApp {
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
         vkDestroyInstance(instance, nullptr);
-
-        glfwDestroyWindow(window);
-        glfwTerminate();
     }
 };
 

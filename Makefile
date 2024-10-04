@@ -1,6 +1,6 @@
 # Compiler and flags
 CXX := g++
-CXXFLAGS := -std=c++17 -O2 
+CXXFLAGS := -std=c++20 -O2 -flto
 LDFLAGS := -lglfw3 -lvulkan -ldl -lpthread -lwayland-client
 SHADER_COMPILER := glslc
 
@@ -12,8 +12,13 @@ SUBDIR_SHADER_FILES := $(shell find $(SHADER_DIR) -mindepth 2 -name "*.vert" -o 
 SHADER_BUILD_DIR := build/shaders
 
 # Source files
-SRC_FILES := $(wildcard $(SRC_DIR)/*.cpp)
+SRC_FILES := $(shell find $(SRC_DIR) -name "*.cpp")
 OBJ_FILES := $(SRC_FILES:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
+
+# Precompiled header
+PCH_HEADER := $(SRC_DIR)/pch.hpp
+PCH_NAME := precompiled.hpp
+PCH_FILE := $(BUILD_DIR)/$(PCH_NAME).gch
 
 # Shader files
 VERTEX_SHADERS := $(wildcard $(SHADER_DIR)/*.vert)
@@ -30,9 +35,14 @@ all: $(TARGET) run
 $(TARGET): $(OBJ_FILES) $(COMPILED_VERTEX_SHADERS) $(COMPILED_FRAGMENT_SHADERS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJ_FILES) $(LDFLAGS)
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+# Compile the precompiled header (pch.h)
+$(PCH_FILE): $(PCH_HEADER)
 	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $< -o $@
+
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(PCH_FILE)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -I$(BUILD_DIR) -include $(PCH_NAME) -c $< -o $@
 
 $(SHADER_BUILD_DIR)/%.vert.spv: $(SHADER_DIR)/%.vert $(SUBDIR_SHADER_FILES)
 	@mkdir -p $(SHADER_BUILD_DIR)

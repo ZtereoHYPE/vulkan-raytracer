@@ -1,7 +1,7 @@
 #version 460
 
-#define SAMPLES 64
-#define BOUNCES 8
+#define SAMPLES 128
+#define BOUNCES 6
 
 #extension GL_GOOGLE_include_directive : enable
 #include "imports/ray.frag"
