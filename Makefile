@@ -1,11 +1,12 @@
 # Compiler and flags
 CXX := g++
-CXXFLAGS := -std=c++20 -O2 -flto
+CXXFLAGS := -std=c++20 -g
+#CXXFLAGS := -std=c++20 -O2 -flto
 LDFLAGS := -lglfw3 -lvulkan -ldl -lpthread -lwayland-client
 SHADER_COMPILER := glslc
 
 # Directories
-SRC_DIR := src
+SRC_DIR := src/cpp
 BUILD_DIR := build
 SHADER_DIR := src/shaders
 SUBDIR_SHADER_FILES := $(shell find $(SHADER_DIR) -mindepth 2 -name "*.vert" -o -name "*.frag")

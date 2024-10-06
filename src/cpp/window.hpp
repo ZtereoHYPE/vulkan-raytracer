@@ -17,7 +17,7 @@ struct Window {
     void pollEvents();
     bool shouldClose();
     void setKeypressCallback(int key, bool *callback);
-    ~Window();
+    void terminate();
 };
 
 VkSurfaceKHR createVulkanWindowSurface(Window* window, VkInstance instance);
