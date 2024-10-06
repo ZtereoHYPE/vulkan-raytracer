@@ -2,7 +2,7 @@
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-class HelloWorldTriangleApp {
+class RayTracerProgram {
    public:
     void run() {
         window.setResizedCallbackVariable(&framebufferResized);
@@ -40,7 +40,7 @@ class HelloWorldTriangleApp {
     timespec lastFrame;
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-        auto app = reinterpret_cast<HelloWorldTriangleApp*>(glfwGetWindowUserPointer(window));
+        auto app = reinterpret_cast<RayTracerProgram*>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
     }
 
@@ -281,7 +281,7 @@ class HelloWorldTriangleApp {
         scissor.offset = {0, 0};
         scissor.extent = swapChainExtent;
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-        
+
         // uniforms!
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
@@ -457,10 +457,10 @@ class HelloWorldTriangleApp {
 };
 
 int main() {
-    HelloWorldTriangleApp app;
+    RayTracerProgram prog;
 
     try {
-        app.run();
+        prog.run();
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
         return EXIT_FAILURE;
