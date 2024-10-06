@@ -134,7 +134,7 @@ class RayTracerProgram {
         VkDeviceMemory shaderBufferMemory;
         VkBuffer shaderBuffer = createShaderBuffer(physicalDevice, device, shaderBufferMemory, shaderBufferMemoryMap);
 
-        VkDescriptorPool descriptorPool = createDescriptorPools(device);
+        VkDescriptorPool descriptorPool = createDescriptorPools(device, MAX_FRAMES_IN_FLIGHT);
 
         descriptorSets = createDescriptorSets(descriptorSetLayout, descriptorPool, uniformBuffers, shaderBuffer);
         commandBuffers = createCommandBuffers(commandPool);

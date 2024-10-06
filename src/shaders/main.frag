@@ -5,7 +5,7 @@
 
 #extension GL_GOOGLE_include_directive : enable
 #include "imports/ray.frag"
-#include "imports/util.frag"
+#include "imports/random.frag"
 
 struct HitRecord {
     bool did_hit;
@@ -180,7 +180,7 @@ vec3 ray_color(Ray ray) {
 
 void main() {
     // initialize "random" seed
-    seed = uint(gl_FragCoord.x + camera.resolution.x * gl_FragCoord.y + camera.frame * 472u);
+    seed = uint(gl_FragCoord.x + camera.resolution.x * gl_FragCoord.y + camera.frame * camera.resolution.x * camera.resolution.y);
 
     vec3 color = vec3(0);
     for (int i = 0; i < SAMPLES; i++) {

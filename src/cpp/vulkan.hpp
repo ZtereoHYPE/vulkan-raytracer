@@ -93,7 +93,7 @@ VkPipeline createGraphicsPipeline(VkDevice device,
                                   VkRenderPass renderPass, 
                                   VkPipelineLayout& pipelineLayout);
 VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code);
-VkDescriptorPool createDescriptorPools(VkDevice device);
+VkDescriptorPool createDescriptorPools(VkDevice device, int maxSets);
 std::vector<VkDescriptorSet> createDescriptorSets(VkDevice device, 
                           VkDescriptorSetLayout descriptorSetLayout, 
                           VkDescriptorPool descriptorPool,
