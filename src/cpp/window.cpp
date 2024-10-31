@@ -28,7 +28,7 @@ Window::Window(const char *title, int initialWidth, int initialHeight) {
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    //glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // todo: re-enable resizing when cleaned up code
     auto glfwWindow = glfwCreateWindow(initialWidth, initialHeight, title, nullptr, nullptr);
 
     glfwSetWindowUserPointer(glfwWindow, this);

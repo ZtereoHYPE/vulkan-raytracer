@@ -1,6 +1,6 @@
 #include "main.hpp"
 
-const int MAX_FRAMES_IN_FLIGHT = 2;
+const int TILE_SIZE = 16;
 
 class RayTracerProgram {
    public:
@@ -12,29 +12,28 @@ class RayTracerProgram {
     }
 
    private:
-    Window window = Window("Vulkan", 200, 150);
+    Window window = Window("Vulkan", 800, 600);
 
     VkDevice device;
     VkSwapchainKHR swapChain;
     VkExtent2D swapChainExtent;
+    std::vector<VkImage> swapChainImages;
     VkRenderPass renderPass;
     VkQueue presentQueue;
-    VkQueue graphicsQueue;
-    VkPipeline pipeline;
-    VkPipelineLayout pipelineLayout;
+    VkQueue computeQueue;
+    VkPipeline computePipeline;
+    VkPipelineLayout computePipelineLayout;
 
-    // there is one of these per concurrently rendered image
-    std::vector<VkDescriptorSet> descriptorSets;
-    std::vector<VkCommandBuffer> commandBuffers;
-    std::vector<VkFramebuffer> framebuffers;
-    std::vector<VkSemaphore> imageAvailableSemaphores;
-    std::vector<VkSemaphore> renderFinishedSemaphores;
-    std::vector<VkFence> inFlightFences;
+    std::vector<VkDescriptorSet> computeDescriptorSets;
+    VkCommandBuffer computeCommandBuffer;
 
-    std::vector<void*> uniformMemoryMaps;
-    void* shaderBufferMemoryMap;
+    VkFence computeInFlightFence;
+    VkSemaphore imageAvailableSemaphore;
+    VkSemaphore computeFinishedSemaphore;
 
-    uint32_t currentFrame = 0;
+    void* uniformMemoryMap;
+    void* computeSSBOMemoryMap;
+
     uint32_t frameCounter = 0;
     bool framebufferResized = false;
     timespec lastFrame;
@@ -44,28 +43,21 @@ class RayTracerProgram {
         app->framebufferResized = true;
     }
 
-    std::vector<VkBuffer> createUniformBuffers(VkPhysicalDevice physicalDevice, VkDevice device, 
-                            std::vector<VkDeviceMemory>& uniformBuffersMemory,
-                            std::vector<void*>& uniformBuffersMaps) {
+    VkBuffer createUniformBuffer(VkPhysicalDevice physicalDevice, VkDevice device, 
+                            VkDeviceMemory &uniformBufferMemory,
+                            void* &uniformBuffersMap) {
 
-        std::vector<VkBuffer> uniformBuffers;
         VkDeviceSize size = sizeof(UniformBufferObject);
+        VkBuffer uniformBuffer;
+        createBuffer(physicalDevice, device, size, 
+                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+                     uniformBuffer, 
+                     uniformBufferMemory);
 
-        uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-        uniformBuffersMaps.resize(MAX_FRAMES_IN_FLIGHT);
+        vkMapMemory(device, uniformBufferMemory, 0, size, 0, &uniformBuffersMap);
 
-        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            createBuffer(physicalDevice, device, size, 
-                            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
-                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-                            uniformBuffers[i], 
-                            uniformBuffersMemory[i]);
-
-            vkMapMemory(device, uniformBuffersMemory[i], 0, size, 0, &uniformBuffersMaps[i]);
-        }
-
-        return uniformBuffers;
+        return uniformBuffer;
     }
 
     VkBuffer createShaderBuffer(VkPhysicalDevice physicalDevice, VkDevice device, 
@@ -94,20 +86,17 @@ class RayTracerProgram {
 
         VkSurfaceKHR surface = createVulkanWindowSurface(&window, instance);
 
-        // depends on surface (device might not be able to present on a specific surface)
         VkPhysicalDevice physicalDevice = pickPhysicalDevice(instance, surface);
-
 
         QueueFamilyIndices queueFamilies = findQueueFamilies(physicalDevice, surface); //queue families that will be used
         device = createLogicalDevice(physicalDevice, queueFamilies);
 
-        vkGetDeviceQueue(device, queueFamilies.graphicsFamily.value(), 0, &graphicsQueue);
         vkGetDeviceQueue(device, queueFamilies.presentFamily.value(), 0, &presentQueue);
+        vkGetDeviceQueue(device, queueFamilies.computeFamily.value(), 0, &computeQueue);
 
-        std::vector<VkImage> swapChainImages;
         VkFormat swapChainImageFormat;
 
-        swapChain = createSwapChain(window,
+        swapChain = createSwapChain(&window,
                                     physicalDevice, 
                                     device, 
                                     surface, 
@@ -116,28 +105,33 @@ class RayTracerProgram {
                                     swapChainExtent,
                                     queueFamilies);
 
-        std::vector<VkImageView> swapChainImageViews = createImageViews(device, swapChainImages, swapChainImageFormat);
+        std::vector<VkImageView> swapChainImageViews = createSwapchainViews(device, swapChainImages, swapChainImageFormat);
 
         renderPass = createRenderPass(device, swapChainImageFormat);
 
-        VkDescriptorSetLayout descriptorSetLayout = createDescriptorSetLayout(device); 
+        VkDescriptorSetLayout computeDescriptorSetLayout = createComputeDescriptorSetLayout(device); 
 
-        pipeline = createGraphicsPipeline(device, descriptorSetLayout, renderPass, pipelineLayout);
+        computePipeline = createComputePipeline(device, computeDescriptorSetLayout, computePipelineLayout);
 
-        framebuffers = createFramebuffers(device, renderPass, swapChainExtent, swapChainImageViews);
-        
         VkCommandPool commandPool = createCommandPool(device, physicalDevice, queueFamilies);
 
-        std::vector<VkDeviceMemory> uniformMemory;
-        std::vector<VkBuffer> uniformBuffers = createUniformBuffers(physicalDevice, device, uniformMemory, uniformMemoryMaps);
+        VkDeviceMemory uniformMemory;
+        VkBuffer uniformBuffer = createUniformBuffer(physicalDevice, device, uniformMemory, uniformMemoryMap);
 
-        VkDeviceMemory shaderBufferMemory;
-        VkBuffer shaderBuffer = createShaderBuffer(physicalDevice, device, shaderBufferMemory, shaderBufferMemoryMap);
+        VkDeviceMemory computeSSBOMemory;
+        VkBuffer computeSSBO = createShaderBuffer(physicalDevice, device, computeSSBOMemory, computeSSBOMemoryMap);
 
-        VkDescriptorPool descriptorPool = createDescriptorPools(device, MAX_FRAMES_IN_FLIGHT);
+        VkImageView accumulatorView;
+        VkDeviceMemory accumulatorMemory;
+        VkImage accumulatorImage = createImage(physicalDevice, device, swapChainExtent, VK_FORMAT_R8G8B8A8_UNORM, accumulatorView, accumulatorMemory);
 
-        descriptorSets = createDescriptorSets(descriptorSetLayout, descriptorPool, uniformBuffers, shaderBuffer);
-        commandBuffers = createCommandBuffers(commandPool);
+        transitionImageLayout(device, commandPool, computeQueue, accumulatorImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+        VkDescriptorPool descriptorPool = createDescriptorPool(device, swapChainImageViews.size());
+        VkSampler sampler = createSampler(device);
+
+        computeDescriptorSets = createComputeDescriptorSets(device, computeDescriptorSetLayout, descriptorPool, uniformBuffer, computeSSBO, accumulatorView, swapChainImageViews, sampler);
+        computeCommandBuffer = createCommandBuffer(device, commandPool);
 
         createSyncObjects();
 
@@ -145,7 +139,7 @@ class RayTracerProgram {
     }
 
     void mainLoop() {
-        pushWorldData(shaderBufferMemoryMap);
+        pushWorldData(computeSSBOMemoryMap);
 
         while (!window.shouldClose()) {
             glfwPollEvents();
@@ -158,138 +152,149 @@ class RayTracerProgram {
     
     
     void drawFrame() {
-        timespec currentTime;
-        clock_gettime(CLOCK_REALTIME, &currentTime);
 
-        long diff = currentTime.tv_nsec - lastFrame.tv_nsec;
-        int fps = 1000l * 1000l * 1000l / diff;
+        /* COMPUTE SUBMISSION */
 
-        //printf("log: log: FPS/avg: %d\n", fps);
-        
-        lastFrame = currentTime;
-
-        // wait for previous frame to complete (so we don't over-write the same command buffer while the GPU is reading it)
-        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+        // No need to fence on the presentation as we only start computing when the next swapchain image is available
+        // We do need to fence on compute because we'll get a new image while the previous is still computing!
+        // todo: get rid of this by limiting cpu render-ahead
+        vkWaitForFences(device, 1, &computeInFlightFence, VK_TRUE, INT_MAX);
 
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 
-        // suboptimal is considereda success code as we can still present it
-        //  since recreating the swapchain means dropping the frame, 
-        //  suboptimal frame is better than no frame
+        // If the swapchain is completely out of date, drop the frame.
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
             //recreateSwapChain();
             return;
+
+        // Suboptimal swapchain images are still considered good as they can still be presented
         } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
             throw std::runtime_error("failed to acquire swap chain image!");
         }
-        // only reset once we know for sure we are submitting work
-        vkResetFences(device, 1, &inFlightFences[currentFrame]);
         
-        vkResetCommandBuffer(commandBuffers[currentFrame], 0);
-        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+        vkResetCommandBuffer(computeCommandBuffer, 0);
 
-        updateUniformBuffer(uniformMemoryMaps[currentFrame]);
+        updateUniformBuffer(uniformMemoryMap);
+        recordComputeCommandBuffer(computeCommandBuffer, imageIndex);
+
+        vkResetFences(device, 1, &computeInFlightFence);
+        VkPipelineStageFlags stage[] = { VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT };
 
         VkSubmitInfo submitInfo {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-        // sync stuff: only wait for the semaphore at the COLOR_ATTACHMENT_OUTPUT stage (writing to the color buffer)
-        VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
-        VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
         submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = waitSemaphores;
-        submitInfo.pWaitDstStageMask = waitStages;
+        submitInfo.pWaitSemaphores = &imageAvailableSemaphore;
+        submitInfo.pWaitDstStageMask = stage;
 
         submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+        submitInfo.pCommandBuffers = &computeCommandBuffer;
 
-        VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
         submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = signalSemaphores; // to signal when the command buffer is done
+        submitInfo.pSignalSemaphores = &computeFinishedSemaphore; // to signal when compute commands are done
 
-        // signal inFlightFence when the queue buffer can be reused
-        if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to submit draw command buffer!");
-        }
+        // signal computeInFlightFence when the command buffer can be reused
+        if (vkQueueSubmit(computeQueue, 1, &submitInfo, computeInFlightFence) != VK_SUCCESS) {
+            throw std::runtime_error("failed to submit compute command buffer!");
+        };
 
-        // submit the result back to the swapchain for presentation
+        /* PRESENTATION */
+
         VkPresentInfoKHR presentInfo {};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
         presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = signalSemaphores; // wait until command buffer done executing
+        presentInfo.pWaitSemaphores = &computeFinishedSemaphore; // wait until the compute is done
 
-        VkSwapchainKHR swapChains[] = {swapChain};
+        VkSwapchainKHR swapChains[] = { swapChain };
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
 
         result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
-        // here there are no consequences as we already presented the frame, so suboptimal = bad
+        // Here there are no consequences as we already presented the frame, so suboptimal = bad
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
             framebufferResized = false;
-            // todo: optimize this and re-enable resizing
             //recreateSwapChain(window, physicalDevice, device, surface, swapChain, renderPass,);
         } else if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to present swap chain image!");
         }
 
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
         frameCounter++;
     }
 
-
-    // uses index of the swapchain image we wanna write to
-    // note: record ~= "write to"
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    void recordComputeCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
         VkCommandBufferBeginInfo beginInfo {};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = 0;
-        beginInfo.pInheritanceInfo = nullptr; // we arent inhereting any state from primary command buffers (we *are* primary)
 
         if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
-        VkRenderPassBeginInfo renderPassInfo {};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = swapChainExtent;
+        // Transition the layout of the image to one compute shaders can output to (VK_IMAGE_LAYOUT_GENERAL)
+        // todo: this ideally happens before waiting for the fence, or the fence shouldn't exist at all
+        VkImageMemoryBarrier computeBarrier {};
+        computeBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        computeBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; // discard the previous contents of the image
+        computeBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        computeBarrier.image = swapChainImages[imageIndex];
+        computeBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        computeBarrier.subresourceRange.baseMipLevel = 0;
+        computeBarrier.subresourceRange.levelCount = 1;
+        computeBarrier.subresourceRange.baseArrayLayer = 0;
+        computeBarrier.subresourceRange.layerCount = 1;
 
-        VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-        renderPassInfo.clearValueCount = 1;
-        renderPassInfo.pClearValues = &clearColor; // used by attachments with VK_ATTACHMENT_LOAD_OP_CLEAR
+        // we aren't transferring ownership
+        computeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        computeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
-        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // inline = no secondary buffers
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline); // bind the graphics pipeline
+        computeBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        computeBarrier.dstAccessMask = VK_ACCESS_NONE; // todo: not sure if good
 
-        // specify the dynamic state
-        VkViewport viewport {};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapChainExtent.width);
-        viewport.height = static_cast<float>(swapChainExtent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+        vkCmdPipelineBarrier(
+            computeCommandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &computeBarrier
+        );
 
-        VkRect2D scissor {};
-        scissor.offset = {0, 0};
-        scissor.extent = swapChainExtent;
-        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[imageIndex], 0, 0);
 
-        // uniforms!
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+        // todo calculate the bounds better
+        vkCmdDispatch(commandBuffer, swapChainExtent.width / TILE_SIZE + 1, swapChainExtent.height / TILE_SIZE + 1, 1);
 
-        //vkCmdDraw(commandBuffer, vertices.size(), 1, 0, 0);
-        vkCmdDraw(commandBuffer, 3, 1, 0, 0); // we only draw 1 triangle that covers clip space and it's hardcoded in the shader
+        // Transition the image to a presentable layout (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+        VkImageMemoryBarrier presentBarrier {};
+        presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        presentBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        presentBarrier.image = swapChainImages[imageIndex];
+        presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        presentBarrier.subresourceRange.baseMipLevel = 0;
+        presentBarrier.subresourceRange.levelCount = 1;
+        presentBarrier.subresourceRange.baseArrayLayer = 0;
+        presentBarrier.subresourceRange.layerCount = 1;
 
-        vkCmdEndRenderPass(commandBuffer);
+        // we aren't transferring ownership
+        presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
+        presentBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        presentBarrier.dstAccessMask = VK_ACCESS_NONE; // todo: not sure if good
+
+        vkCmdPipelineBarrier(
+            computeCommandBuffer,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &presentBarrier
+        );
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
             throw std::runtime_error("failed to record command buffer!");
@@ -355,71 +360,7 @@ class RayTracerProgram {
         sbo->spheres[3].color = glm::vec3(1, 0.99, 0.9);
     }
 
-    std::vector<VkDescriptorSet> createDescriptorSets(VkDescriptorSetLayout descriptorSetLayout, 
-                                                      VkDescriptorPool descriptorPool,
-                                                      std::vector<VkBuffer>& uniformBuffers,
-                                                      VkBuffer& shaderBuffer) {
-
-        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
-
-        // we create a descriptor set per frame in flight with the same
-        VkDescriptorSetAllocateInfo allocInfo {};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = layouts.size();
-        allocInfo.pSetLayouts = layouts.data();
-
-        std::vector<VkDescriptorSet> descriptorSets;
-        descriptorSets.resize(layouts.size());
-
-        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate descriptor sets");
-        }
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            VkDescriptorBufferInfo uniformBufferInfo {};
-            uniformBufferInfo.buffer = uniformBuffers[i];
-            uniformBufferInfo.offset = 0;
-            uniformBufferInfo.range = VK_WHOLE_SIZE;
-
-            // and one for the sbo
-            VkDescriptorBufferInfo shaderBufferInfo {};
-            shaderBufferInfo.buffer = shaderBuffer; // they all point to the same buffer
-            shaderBufferInfo.offset = 0;
-            shaderBufferInfo.range = VK_WHOLE_SIZE;
-
-
-            VkWriteDescriptorSet descriptorWrites[2] = {};
-
-            // write descriptor for the uniform buffer
-            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = descriptorSets[i];
-            descriptorWrites[0].dstBinding = 0;
-            descriptorWrites[0].dstArrayElement = 0;
-            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            descriptorWrites[0].descriptorCount = 1;
-            descriptorWrites[0].pBufferInfo = &uniformBufferInfo;
-
-            // idem for the shader buffer
-            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = descriptorSets[i];
-            descriptorWrites[1].dstBinding = 1;
-            descriptorWrites[1].dstArrayElement = 0;
-            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pBufferInfo = &shaderBufferInfo;
-
-            vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
-        }
-
-        return descriptorSets;
-    }
-
     void createSyncObjects() {
-        imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-
         VkSemaphoreCreateInfo semaphoreInfo {};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
@@ -427,32 +368,11 @@ class RayTracerProgram {
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // it should start pre-signaled so the first frame doesnt have to wait forever
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
-                throw std::runtime_error("failed to create sync stuff!");
-            }
+        if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
+            vkCreateSemaphore(device, &semaphoreInfo, nullptr, &computeFinishedSemaphore) != VK_SUCCESS ||
+            vkCreateFence(device, &fenceInfo, nullptr, &computeInFlightFence) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create sync stuff!");
         }
-    }
-
-    std::vector<VkCommandBuffer> createCommandBuffers(VkCommandPool commandPool) {
-        std::vector<VkCommandBuffer> commandBuffers;
-        commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-
-        VkCommandBufferAllocateInfo allocInfo {};
-
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = commandPool;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;  //directly submitted to queue, but not called from primary
-        allocInfo.commandBufferCount = commandBuffers.size();
-
-        if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate command buffers!");
-        }
-        printf("log: Created command buffer\n");
-
-        return commandBuffers;
     }
 };
 

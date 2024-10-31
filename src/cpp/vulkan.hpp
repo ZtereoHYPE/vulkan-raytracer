@@ -74,7 +74,7 @@ SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurface
 int getDeviceScore(VkPhysicalDevice device, VkSurfaceKHR surface);
 QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface);
 VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, QueueFamilyIndices queueIndices);
-VkSwapchainKHR createSwapChain(Window window,
+VkSwapchainKHR createSwapChain(Window *window,
                                VkPhysicalDevice physicalDevice,
                                VkDevice device,
                                VkSurfaceKHR surface, 
@@ -83,17 +83,21 @@ VkSwapchainKHR createSwapChain(Window window,
                                VkExtent2D& swapChainExtent,
                                QueueFamilyIndices queueFamilies);
 VkSurfaceFormatKHR chooseSwapSurfaceMode(const std::vector<VkSurfaceFormatKHR>& availableFormats);
-//VkExtent2D chooseSwapExtent(Window window, const VkSurfaceCapabilitiesKHR& capabilities);
-VkExtent2D chooseSwapExtent(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, Window window, const VkSurfaceCapabilitiesKHR& capabilities);
-std::vector<VkImageView> createImageViews(VkDevice device, std::vector<VkImage> swapChainImages, VkFormat swapChainImageFormat);
+VkExtent2D chooseSwapExtent(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, Window *window, const VkSurfaceCapabilitiesKHR& capabilities);
+std::vector<VkImageView> createSwapchainViews(VkDevice device, std::vector<VkImage> swapChainImages, VkFormat swapChainImageFormat);
 VkRenderPass createRenderPass(VkDevice device, VkFormat swapChainImageFormat);
-VkDescriptorSetLayout createDescriptorSetLayout(VkDevice device);
+VkDescriptorSetLayout createGraphicDescriptorSetLayout(VkDevice device);
+VkDescriptorSetLayout createComputeDescriptorSetLayout(VkDevice device);
 VkPipeline createGraphicsPipeline(VkDevice device,
                                   VkDescriptorSetLayout descriptorSetLayout,
                                   VkRenderPass renderPass, 
                                   VkPipelineLayout& pipelineLayout);
+VkPipeline createComputePipeline(VkDevice device,
+                                 VkDescriptorSetLayout descriptorSetLayout,
+                                 VkPipelineLayout& pipelineLayout);
 VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code);
-VkDescriptorPool createDescriptorPools(VkDevice device, int maxSets);
+VkDescriptorPool createGraphicsDescriptorPool(VkDevice device, int maxSets);
+VkDescriptorPool createDescriptorPool(VkDevice device, int maxSets);
 std::vector<VkDescriptorSet> createDescriptorSets(VkDevice device, 
                           VkDescriptorSetLayout descriptorSetLayout, 
                           VkDescriptorPool descriptorPool,
@@ -110,10 +114,22 @@ void createBuffer(VkPhysicalDevice physicalDevice,
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t suitableMemoryTypes, VkMemoryPropertyFlags properties);
 VkCommandPool createCommandPool(VkDevice device, VkPhysicalDevice physicalDevice, QueueFamilyIndices queueFamilyIndices);
 std::vector<VkFramebuffer> createFramebuffers(VkDevice device, VkRenderPass renderPass, VkExtent2D swapChainExtent, std::vector<VkImageView> swapChainImageViews);
-std::vector<VkCommandBuffer> createCommandBuffers(VkDevice device, VkCommandPool commandPool);
-
-void createSyncObjects(VkDevice device, 
-                       std::vector<VkSemaphore>& imageAvailableSemaphores,
-                       std::vector<VkSemaphore>& renderFinishedSemaphores, 
-                       std::vector<VkFence>& inFlightFences);
+VkCommandBuffer createCommandBuffer(VkDevice device, VkCommandPool commandPool);
 void cleanupSwapChain(VkDevice device, VkSwapchainKHR swapChain, std::vector<VkFramebuffer> swapChainFramebuffers, std::vector<VkImageView> swapChainImageViews);
+VkImage createImage(VkPhysicalDevice physicalDevice, VkDevice device, VkExtent2D extent, VkFormat format, VkImageView &imageView, VkDeviceMemory &imageMemory);
+VkCommandBuffer createCommandBuffer(VkDevice device, VkCommandPool commandPool);
+std::vector<VkDescriptorSet> createComputeDescriptorSets(VkDevice device, 
+                                           VkDescriptorSetLayout descriptorSetLayout, 
+                                           VkDescriptorPool descriptorPool,
+                                           VkBuffer uniformBuffer,
+                                           VkBuffer shaderBuffer,
+                                           VkImageView accumulatorImageView,
+                                           std::vector<VkImageView> swapChainImageViews,
+                                           VkSampler sampler);
+VkDescriptorSet createGraphicDescriptorSet(VkDevice device, 
+                                           VkDescriptorSetLayout descriptorSetLayout, 
+                                           VkDescriptorPool descriptorPool,
+                                           VkImageView computeOutputView,
+                                           VkImageView accumulatorView);
+VkSampler createSampler(VkDevice device);
+void transitionImageLayout(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout);
