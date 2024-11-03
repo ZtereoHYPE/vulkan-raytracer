@@ -39,7 +39,7 @@ $(PCH_FILE): $(PCH_HEADER)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(PCH_FILE)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.hpp $(PCH_FILE)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -I$(BUILD_DIR) -include $(PCH_NAME) -c $< -o $@
 
