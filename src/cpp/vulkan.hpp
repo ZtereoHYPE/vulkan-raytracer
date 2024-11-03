@@ -12,11 +12,17 @@ struct UniformBufferObject {
     glm::vec3 origin;
 };
 
+struct Material {
+    alignas(16) glm::vec4 baseColor;
+    alignas(16) glm::vec4 emissiveStrength;
+    alignas(4) float reflectivity;
+    alignas(4) float roughness;
+};
+
 struct Sphere {
     float radius;
-    bool emissive;
-    alignas(16) glm::vec3 color;
     alignas(16) glm::vec3 center;
+    struct Material material;
 };
 
 struct SphereShaderBufferObject {

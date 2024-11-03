@@ -338,26 +338,34 @@ class RayTracerProgram {
     void pushWorldData(void* shaderBufferMemoryMap) {
         SphereShaderBufferObject* sbo = reinterpret_cast<SphereShaderBufferObject*>(shaderBufferMemoryMap);
 
+        auto none = glm::vec4(0);
+
         sbo->count = 4;
         sbo->spheres[0].center = glm::vec3(3.0, 0.5, 5.0);
         sbo->spheres[0].radius = 1.5;
-        sbo->spheres[0].emissive = false;
-        sbo->spheres[0].color = glm::vec3(0.99, 0.43, 0.33);
+        sbo->spheres[0].material.emissiveStrength = none;
+        sbo->spheres[0].material.baseColor = glm::vec4(1, 0.1, 0.1, 0);
+        sbo->spheres[0].material.reflectivity = 1.0;
+        sbo->spheres[0].material.roughness = 0.003;
 
         sbo->spheres[1].center = glm::vec3(0.0, 0.0, 5.0);
-        sbo->spheres[1].radius = 1.0;
-        sbo->spheres[1].emissive = false;
-        sbo->spheres[1].color = glm::vec3(0.48, 0.62, 0.89);
+        sbo->spheres[1].radius = 1;
+        sbo->spheres[1].material.emissiveStrength = none;
+        sbo->spheres[1].material.baseColor = glm::vec4(0.48, 0.62, 0.89, 1);
+        sbo->spheres[1].material.reflectivity = 1.0;
+        sbo->spheres[1].material.roughness = 0.1;
 
         sbo->spheres[2].center = glm::vec3(0.0, -100.0, 5.0);
         sbo->spheres[2].radius = 99.0;
-        sbo->spheres[2].emissive = false;
-        sbo->spheres[2].color = glm::vec3(0.89, 0.7, 0.48);
+        sbo->spheres[2].material.emissiveStrength = none;
+        sbo->spheres[2].material.baseColor = glm::vec4(0.5, 0.5, 0.5, 1);
+        sbo->spheres[2].material.reflectivity = 0.0;
 
         sbo->spheres[3].center = glm::vec3(-500.0, 200.0, 700.0);
         sbo->spheres[3].radius = 200.0;
-        sbo->spheres[3].emissive = true;
-        sbo->spheres[3].color = glm::vec3(1, 0.99, 0.9);
+        sbo->spheres[3].material.emissiveStrength = glm::vec4(10.0, 10.0, 10.0, 1);
+        sbo->spheres[3].material.baseColor = glm::vec4(1, 0.99, 0.9, 1);
+        sbo->spheres[3].material.reflectivity = 0.0;
     }
 
     void createSyncObjects() {
