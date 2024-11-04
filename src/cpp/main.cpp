@@ -308,7 +308,8 @@ class RayTracerProgram {
 
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        auto origin = glm::vec3(0, 0, 0);
+        //auto origin = glm::vec4(std::sin(time)*3, 0, 0, 0);
+        auto origin = glm::vec4(0, 0, 0, 0);
 
         float ratio = swapChainExtent.width / (float) swapChainExtent.height;
         float u, v;
@@ -329,6 +330,7 @@ class RayTracerProgram {
             .focalLength = 1.5,
             .time = frameCounter,
             .origin = origin,
+            .rotation = glm::mat4((glm::mat3)glm::lookAt(glm::vec3(origin), glm::vec3(0, 0, -5), glm::vec3(0, 1, 0))),
         };
 
         // not super efficient, kinda like staging buffers we need push constants or whatever
@@ -340,20 +342,23 @@ class RayTracerProgram {
 
         auto none = glm::vec4(0);
 
-        sbo->count = 4;
+        sbo->count = 7;
         sbo->spheres[0].center = glm::vec3(3.0, 0.5, 5.0);
         sbo->spheres[0].radius = 1.5;
         sbo->spheres[0].material.emissiveStrength = none;
         sbo->spheres[0].material.baseColor = glm::vec4(1, 0.1, 0.1, 0);
-        sbo->spheres[0].material.reflectivity = 1.0;
+        sbo->spheres[0].material.reflectivity = 0.0;
         sbo->spheres[0].material.roughness = 0.003;
 
         sbo->spheres[1].center = glm::vec3(0.0, 0.0, 5.0);
         sbo->spheres[1].radius = 1;
         sbo->spheres[1].material.emissiveStrength = none;
         sbo->spheres[1].material.baseColor = glm::vec4(0.48, 0.62, 0.89, 1);
-        sbo->spheres[1].material.reflectivity = 1.0;
-        sbo->spheres[1].material.roughness = 0.1;
+        sbo->spheres[1].material.baseColor = glm::vec4(1, 1, 1, 1);
+        sbo->spheres[1].material.reflectivity = 0.0;
+        sbo->spheres[1].material.roughness = 0.0;
+        sbo->spheres[1].material.isGlass = true;
+        sbo->spheres[1].material.ior = 1.45;
 
         sbo->spheres[2].center = glm::vec3(0.0, -100.0, 5.0);
         sbo->spheres[2].radius = 99.0;
@@ -363,9 +368,31 @@ class RayTracerProgram {
 
         sbo->spheres[3].center = glm::vec3(-500.0, 200.0, 700.0);
         sbo->spheres[3].radius = 200.0;
-        sbo->spheres[3].material.emissiveStrength = glm::vec4(10.0, 10.0, 10.0, 1);
+        sbo->spheres[3].material.emissiveStrength = glm::vec4(15.0, 15.0, 15.0, 1);
         sbo->spheres[3].material.baseColor = glm::vec4(1, 0.99, 0.9, 1);
         sbo->spheres[3].material.reflectivity = 0.0;
+
+        sbo->spheres[4].center = glm::vec3(0.8, -1, 2.0);
+        sbo->spheres[4].radius = 0.3;
+        sbo->spheres[4].material.roughness = 0.25;
+        sbo->spheres[4].material.emissiveStrength = none;
+        sbo->spheres[4].material.baseColor = glm::vec4(0.1, 0.99, 0.6, 1);
+        sbo->spheres[4].material.reflectivity = 1.0;
+        sbo->spheres[4].material.isGlass = false;
+
+        sbo->spheres[5].center = glm::vec3(-1.6, -0.8, 3.0);
+        sbo->spheres[5].radius = 0.3;
+        sbo->spheres[5].material.roughness = 0;
+        sbo->spheres[5].material.isGlass = false;
+        sbo->spheres[5].material.emissiveStrength = none;
+        sbo->spheres[5].material.baseColor = glm::vec4(0, 0.5, 0.9, 1);
+
+        sbo->spheres[6].center = glm::vec3(-3.0, -0.4, 7.0);
+        sbo->spheres[6].radius = 0.8;
+        sbo->spheres[6].material.roughness = 0;
+        sbo->spheres[6].material.isGlass = false;
+        sbo->spheres[6].material.emissiveStrength = glm::vec4(2, 1.5, 0, 1);
+        sbo->spheres[6].material.baseColor = glm::vec4(1, 0.99, 0.9, 1);
     }
 
     void createSyncObjects() {

@@ -7,9 +7,10 @@
 struct UniformBufferObject {
     glm::vec2 resolution;
     glm::vec2 viewportUv;
-    float focalLength;
-    uint time;
-    glm::vec3 origin;
+    alignas(4) float focalLength;
+    alignas(4) uint time;
+    alignas(16) glm::vec4 origin;
+    alignas(16) glm::mat4 rotation;
 };
 
 struct Material {
@@ -17,6 +18,8 @@ struct Material {
     alignas(16) glm::vec4 emissiveStrength;
     alignas(4) float reflectivity;
     alignas(4) float roughness;
+    bool isGlass;
+    float ior;
 };
 
 struct Sphere {
