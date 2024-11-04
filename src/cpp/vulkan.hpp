@@ -33,19 +33,6 @@ struct SphereShaderBufferObject {
     Sphere spheres[];
 };
 
-struct Vertex {
-    glm::vec2 pos;
-    glm::vec3 color;
-
-    // describes the rate at which to load data from memory thru vertices (vertex format)
-    // here we decide that this will be bound at 0 and be of size X per vertex
-    static VkVertexInputBindingDescription getBindingDescription();
-
-    // describes the layout of the attributes for each vertex
-    // here we specify how to read the various attributes we need for our bound buffers
-    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions();
-};
-
 struct SwapChainSupportDetails {
     VkSurfaceCapabilitiesKHR capabilities;
     std::vector<VkSurfaceFormatKHR> formats;
@@ -95,17 +82,11 @@ VkSurfaceFormatKHR chooseSwapSurfaceMode(const std::vector<VkSurfaceFormatKHR>& 
 VkExtent2D chooseSwapExtent(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, Window *window, const VkSurfaceCapabilitiesKHR& capabilities);
 std::vector<VkImageView> createSwapchainViews(VkDevice device, std::vector<VkImage> swapChainImages, VkFormat swapChainImageFormat);
 VkRenderPass createRenderPass(VkDevice device, VkFormat swapChainImageFormat);
-VkDescriptorSetLayout createGraphicDescriptorSetLayout(VkDevice device);
 VkDescriptorSetLayout createComputeDescriptorSetLayout(VkDevice device);
-VkPipeline createGraphicsPipeline(VkDevice device,
-                                  VkDescriptorSetLayout descriptorSetLayout,
-                                  VkRenderPass renderPass, 
-                                  VkPipelineLayout& pipelineLayout);
 VkPipeline createComputePipeline(VkDevice device,
                                  VkDescriptorSetLayout descriptorSetLayout,
                                  VkPipelineLayout& pipelineLayout);
 VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code);
-VkDescriptorPool createGraphicsDescriptorPool(VkDevice device, int maxSets);
 VkDescriptorPool createDescriptorPool(VkDevice device, int maxSets);
 std::vector<VkDescriptorSet> createDescriptorSets(VkDevice device, 
                           VkDescriptorSetLayout descriptorSetLayout, 
@@ -135,10 +116,5 @@ std::vector<VkDescriptorSet> createComputeDescriptorSets(VkDevice device,
                                            VkImageView accumulatorImageView,
                                            std::vector<VkImageView> swapChainImageViews,
                                            VkSampler sampler);
-VkDescriptorSet createGraphicDescriptorSet(VkDevice device, 
-                                           VkDescriptorSetLayout descriptorSetLayout, 
-                                           VkDescriptorPool descriptorPool,
-                                           VkImageView computeOutputView,
-                                           VkImageView accumulatorView);
 VkSampler createSampler(VkDevice device);
 void transitionImageLayout(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout);

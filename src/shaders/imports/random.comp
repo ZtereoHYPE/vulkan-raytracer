@@ -28,10 +28,10 @@ vec2 pixel_offset(inout uint seed) {
 
 // https://www.semanticscholar.org/paper/A-Note-on-the-Generation-of-Random-Normal-Deviates-Box-Muller/bdbf5ecc09facb88308f2325dbf0b458f812ab2e
 float random_normal(inout uint seed) {
-    float a = sqrt(-2.0 * log(1.0f - pgc_random(seed)));
+    float a = sqrt(-2.0 * log(1.0 - pgc_random(seed)));
     float b = 2.0 * PI * pgc_random(seed);
 
-    return cos(b) * a;
+    return cos(b) * min(a, 1000000000.0); //todo: figure out why this is exploding
 }
 
 // Since normal distributions are spherically symmetric, sampling it for each coordinate

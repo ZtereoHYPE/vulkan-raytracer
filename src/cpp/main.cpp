@@ -18,7 +18,6 @@ class RayTracerProgram {
     VkSwapchainKHR swapChain;
     VkExtent2D swapChainExtent;
     std::vector<VkImage> swapChainImages;
-    VkRenderPass renderPass;
     VkQueue presentQueue;
     VkQueue computeQueue;
     VkPipeline computePipeline;
@@ -106,8 +105,6 @@ class RayTracerProgram {
                                     queueFamilies);
 
         std::vector<VkImageView> swapChainImageViews = createSwapchainViews(device, swapChainImages, swapChainImageFormat);
-
-        renderPass = createRenderPass(device, swapChainImageFormat);
 
         VkDescriptorSetLayout computeDescriptorSetLayout = createComputeDescriptorSetLayout(device); 
 

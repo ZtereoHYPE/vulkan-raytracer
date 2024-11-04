@@ -136,6 +136,10 @@ HitRecord hit_sphere(Sphere sphere, Ray ray) {
     bool did_not_hit = discriminant < 0;
     bool is_behind = t < 0.0001; // avoid floating point precisions
 
+    // todo: could be solved by avoiding intersections with the same sphere and type twice in a row (eg. cannot enter sphere 2 twice in a row)
+    // Done by keeping track of last enter / exit (+2 if enter, -2 if exit), and checking if it's the same.
+    // Entering / exiting could be stored in the hit to avoid computing it in the glass shader (and other ones)
+
     hit.did_hit = !(did_not_hit || is_behind);
 
     return hit;
@@ -147,14 +151,14 @@ vec3 background_color(Ray ray) {
     //return vec3(0);
 }
 
-// Schlick approximation for Fresnel effect on glass
+// Schlick approximation of Fresnel on glass
 float schlick_reflectance(float cos_angle, float ior) {
     float r0 = (1 - ior) / (1 + ior);
     r0 = r0 * r0;
     return r0 + (1 - r0) * pow((1 - cos_angle), 5);
 }
 
-// todo: this does not handle intersecting spheres gracefully, the ratios must be pre-divided for that
+// this does not handle intersecting spheres gracefully, the ratios must be pre-divided for that
 void glass_shader(inout Ray ray, HitRecord hit) {
     vec3 normal = hit.normal;
     vec3 dir = ray.direction;
