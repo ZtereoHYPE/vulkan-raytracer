@@ -1,7 +1,7 @@
 #version 460
 
-#define SAMPLES 64
-#define BOUNCES 6
+#define SAMPLES 32
+#define BOUNCES 32
 
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_scalar_block_layout : enable
@@ -39,9 +39,11 @@ layout(std430, set = 0, binding = 0) uniform Camera {
     vec2 resolution; // todo: move this to (unsinged) integers
     vec2 uv;
     float focal_len;
+    float focus_distance;
+    float aperture_radius;
     uint frame;
     vec4 origin;
-    mat3 rotation;
+    mat4 rotation;
 } camera;
 
 layout(std430, set = 0, binding = 1) readonly buffer SphereSBO {
@@ -57,41 +59,30 @@ layout(set = 0, binding = 3) writeonly uniform image2D framebuffer;
 uint seed;
 
 Ray calculate_ray(vec2 frag_coord) {
-    /*  We are starting from -uv/2 on each axys, and we need to reach +uv/2.
-        Expressed as a formula:
-            -uv/2 + pixel_delta * res = +uv/2
-            pixel_delta = uv / res
+    // Scale the virtual camera to make the UV plane coincide with the focus plane
+    vec2 focus_plane_uv = camera.uv * (camera.focus_distance / camera.focal_len);
 
-        The Y component is inverted because as the pixels' y axys grows in value
-        we want to descend in the 3D space.
+    // The distance between pixels in world-space
+    vec2 pixel_delta = focus_plane_uv / camera.resolution;
+    pixel_delta *= vec2(1, -1); // Y grows downwards in vulkan, so we have to invert it
 
-        Some of this could be moved to the CPU as a uniform, but is left here
-        for now for clarity and because the performance impact is minor.
-    */
+    vec3 viewport_origin = vec3(-focus_plane_uv.x/2, focus_plane_uv.y/2, camera.focus_distance) + // Top left of focus plane
+                           vec3(pixel_delta/2, 0);  // Center the pixel
 
-    float focus_distance = 5.0;
-    vec2 defocus_disk = vec2(0.5);
+    vec3 pixel_coords = viewport_origin + 
+                        vec3(pixel_delta * (frag_coord + pixel_offset(seed)), 0); // Jitter for anti-aliasing
 
-    vec2 pixel_delta = camera.uv/camera.resolution;
-    pixel_delta *= vec2(1, -1);
+    vec3 aperture_offset = vec3(random_disc(seed), 0) * camera.aperture_radius;
 
-    vec3 pixel_origin = vec3(-camera.uv.x/2, camera.uv.y/2, camera.focal_len) + // the top left is at x=-u but y=v (up is +)
-                        camera.origin.xyz +  // to place it correctly in world-space
-                        vec3(pixel_delta/2, 0);  // to center the pixel
+    // Vector from origin to pixel, rotated
+    vec3 ray_direction = mat3(camera.rotation) * normalize(pixel_coords - aperture_offset);
 
-    // get a random offset for anti-aliasing
-    vec2 offset = pixel_offset(seed);
-    vec3 pixel_sample = pixel_origin + 
-                        vec3(pixel_delta * (frag_coord + offset), 0);
+    // Rotated aperture offset, shifted by camera origin 
+    vec3 ray_origin = (mat3(camera.rotation) * aperture_offset) + camera.origin.xyz;
 
-    vec3 direction = normalize(pixel_sample - camera.origin.xyz);
-
-    direction = mat3(camera.rotation) * direction;
-
-    Ray ray;
-    ray.direction = direction; // vector from origin to pixel
-    ray.origin = camera.origin.xyz;
-
+    Ray ray; 
+    ray.direction = ray_direction;
+    ray.origin = ray_origin;
     return ray;
 }
 
@@ -271,7 +262,7 @@ void main() {
 
     if (coordinates.x < size.x && coordinates.y < size.y) {
         //seed = uint(coordinates.x + camera.resolution.x * coordinates.y);
-        seed = uint(coordinates.x + camera.resolution.x * coordinates.y + camera.frame * coordinates.y);
+        seed = uint(coordinates.x + camera.resolution.x * coordinates.y + camera.frame * coordinates.y * coordinates.x);
 
         vec3 color = vec3(0);
         for (int i = 0; i < SAMPLES; i++) {

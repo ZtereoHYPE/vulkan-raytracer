@@ -319,15 +319,15 @@ class RayTracerProgram {
             v = 1/ratio;
         }
 
-        float size = 2.0;
-
         UniformBufferObject ubo {
             .resolution = glm::vec2(swapChainExtent.width, swapChainExtent.height),
-            .viewportUv = glm::vec2(u, v) * size,
-            .focalLength = 1.5,
+            .viewportUv = glm::vec2(u, v),
+            .focalLength = 1.0,
+            .focusDistance = 4.8,
+            .apertureRadius = 0.4,
             .time = frameCounter,
             .origin = origin,
-            .rotation = glm::mat4((glm::mat3)glm::lookAt(glm::vec3(origin), glm::vec3(0, 0, -5), glm::vec3(0, 1, 0))),
+            .rotation = glm::lookAt(glm::vec3(origin), glm::vec3(0, 0, -3.5), glm::vec3(0, 1, 0)),
         };
 
         // not super efficient, kinda like staging buffers we need push constants or whatever
@@ -344,7 +344,7 @@ class RayTracerProgram {
         sbo->spheres[0].radius = 1.5;
         sbo->spheres[0].material.emissiveStrength = none;
         sbo->spheres[0].material.baseColor = glm::vec4(1, 0.1, 0.1, 0);
-        sbo->spheres[0].material.reflectivity = 0.0;
+        sbo->spheres[0].material.reflectivity = 1.0;
         sbo->spheres[0].material.roughness = 0.003;
 
         sbo->spheres[1].center = glm::vec3(0.0, 0.0, 5.0);

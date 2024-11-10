@@ -50,3 +50,8 @@ vec3 random_unit_in_hemisphere(inout uint seed, in vec3 normal) {
         return -vector;
     }
 }
+
+vec2 random_disc(inout uint seed) {
+    vec2 random = vec2(random_normal(seed), random_normal(seed));
+    return normalize(random) * pgc_random(seed); // random direction * random radius
+}
