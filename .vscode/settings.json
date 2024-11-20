@@ -59,7 +59,9 @@
         "expected": "cpp",
         "ratio": "cpp",
         "iomanip": "cpp",
-        "sstream": "cpp"
+        "sstream": "cpp",
+        "buffer": "cpp",
+        "netfwd": "cpp"
     },
     "C_Cpp.formatting": "clangFormat",
     "C_Cpp.clang_format_sortIncludes": true,

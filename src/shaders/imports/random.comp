@@ -1,6 +1,7 @@
-int state = 0;
+int quadrant = 0;
 int subdivisions_per_axis = 2;
 const float PI = 3.1415926;
+uint seed;
 
 // 0..1
 float pgc_random(inout uint seed) {
@@ -19,10 +20,10 @@ vec2 pixel_offset(inout uint seed) {
     float x = pgc_random(seed) * offset;
     float y = pgc_random(seed) * offset;
 
-    x += float(state % subdivisions_per_axis) * offset;
-    y += float(state / subdivisions_per_axis) * offset;
+    x += float(quadrant % subdivisions_per_axis) * offset;
+    y += float(quadrant / subdivisions_per_axis) * offset;
 
-    state = (state + 1) % (subdivisions_per_axis * subdivisions_per_axis);
+    quadrant = (quadrant + 1) % (subdivisions_per_axis * subdivisions_per_axis);
     return vec2(x - 0.5, y - 0.5);
 }
 
