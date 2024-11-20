@@ -614,29 +614,36 @@ VkDescriptorSetLayout createComputeDescriptorSetLayout(VkDevice device) {
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT; // only for compute
 
-    // This buffer will contain the scene data
-    VkDescriptorSetLayoutBinding sboLayoutBinding {};
-    sboLayoutBinding.binding = 1;
-    sboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    sboLayoutBinding.descriptorCount = 1;
-    sboLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    // This buffer will contain the sphere data
+    VkDescriptorSetLayoutBinding sphereLayoutBinding {};
+    sphereLayoutBinding.binding = 1;
+    sphereLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    sphereLayoutBinding.descriptorCount = 1;
+    sphereLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    // This buffer will contain the triangle data
+    VkDescriptorSetLayoutBinding triangleLayoutBinding {};
+    triangleLayoutBinding.binding = 2;
+    triangleLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    triangleLayoutBinding.descriptorCount = 1;
+    triangleLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     // This is the image where the ray traced frames will be accumulated
     VkDescriptorSetLayoutBinding accumulatorLayoutBinding {};
-    accumulatorLayoutBinding.binding = 2;
+    accumulatorLayoutBinding.binding = 3;
     accumulatorLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     accumulatorLayoutBinding.descriptorCount = 1;
     accumulatorLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     // This is the swapchain image that will be bound
     VkDescriptorSetLayoutBinding swapchainLayoutBinding {};
-    swapchainLayoutBinding.binding = 3;
+    swapchainLayoutBinding.binding = 4;
     swapchainLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; // todo: maybe storage_texel instead?
     swapchainLayoutBinding.descriptorCount = 1;
     swapchainLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
-        uboLayoutBinding, sboLayoutBinding, accumulatorLayoutBinding, swapchainLayoutBinding
+        uboLayoutBinding, sphereLayoutBinding, triangleLayoutBinding, accumulatorLayoutBinding, swapchainLayoutBinding
     };
 
     VkDescriptorSetLayoutCreateInfo layoutInfo {};
@@ -653,13 +660,14 @@ VkDescriptorSetLayout createComputeDescriptorSetLayout(VkDevice device) {
 }
 
 std::vector<VkDescriptorSet> createComputeDescriptorSets(VkDevice device, 
-                                           VkDescriptorSetLayout descriptorSetLayout, 
-                                           VkDescriptorPool descriptorPool,
-                                           VkBuffer uniformBuffer,
-                                           VkBuffer shaderBuffer,
-                                           VkImageView accumulatorImageView,
-                                           std::vector<VkImageView> swapChainImageViews,
-                                           VkSampler sampler) {
+                                                         VkDescriptorSetLayout descriptorSetLayout, 
+                                                         VkDescriptorPool descriptorPool,
+                                                         VkBuffer uniformBuffer,
+                                                         VkBuffer shaderBuffer,
+                                                         uint offset,
+                                                         VkImageView accumulatorImageView,
+                                                         std::vector<VkImageView> swapChainImageViews,
+                                                         VkSampler sampler) {
 
     // Create a copy of the layout for each descriptor set
     std::vector<VkDescriptorSetLayout> layouts = std::vector { swapChainImageViews.size(), descriptorSetLayout };
@@ -685,10 +693,15 @@ std::vector<VkDescriptorSet> createComputeDescriptorSets(VkDevice device,
         uniformBufferInfo.offset = 0;
         uniformBufferInfo.range = VK_WHOLE_SIZE;
 
-        VkDescriptorBufferInfo shaderBufferInfo {};
-        shaderBufferInfo.buffer = shaderBuffer;
-        shaderBufferInfo.offset = 0;
-        shaderBufferInfo.range = VK_WHOLE_SIZE;
+        VkDescriptorBufferInfo meshInfoBufferInfo {};
+        meshInfoBufferInfo.buffer = shaderBuffer;
+        meshInfoBufferInfo.offset = 0;
+        meshInfoBufferInfo.range = offset;
+
+        VkDescriptorBufferInfo triangleBufferInfo {};
+        triangleBufferInfo.buffer = shaderBuffer;
+        triangleBufferInfo.offset = offset;
+        triangleBufferInfo.range = VK_WHOLE_SIZE;
 
         VkDescriptorImageInfo accumulatorImageInfo {};
         accumulatorImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL; // todo: find a more optimal one
@@ -696,11 +709,11 @@ std::vector<VkDescriptorSet> createComputeDescriptorSets(VkDevice device,
         accumulatorImageInfo.sampler = sampler;
 
         VkDescriptorImageInfo swapchainImageInfo {};
-        swapchainImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL; // todo: find a more optimal one
+        swapchainImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
         swapchainImageInfo.imageView = swapChainImageViews[i];
         swapchainImageInfo.sampler = sampler;
         
-        VkWriteDescriptorSet descriptorWrites[4] = {};
+        VkWriteDescriptorSet descriptorWrites[5] = {};
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSets[i];
@@ -716,15 +729,15 @@ std::vector<VkDescriptorSet> createComputeDescriptorSets(VkDevice device,
         descriptorWrites[1].dstArrayElement = 0;
         descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         descriptorWrites[1].descriptorCount = 1;
-        descriptorWrites[1].pBufferInfo = &shaderBufferInfo;
+        descriptorWrites[1].pBufferInfo = &meshInfoBufferInfo;
 
         descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[2].dstSet = descriptorSets[i];
         descriptorWrites[2].dstBinding = 2;
         descriptorWrites[2].dstArrayElement = 0;
-        descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         descriptorWrites[2].descriptorCount = 1;
-        descriptorWrites[2].pImageInfo = &accumulatorImageInfo;
+        descriptorWrites[2].pBufferInfo = &triangleBufferInfo;
 
         descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[3].dstSet = descriptorSets[i];
@@ -732,9 +745,17 @@ std::vector<VkDescriptorSet> createComputeDescriptorSets(VkDevice device,
         descriptorWrites[3].dstArrayElement = 0;
         descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         descriptorWrites[3].descriptorCount = 1;
-        descriptorWrites[3].pImageInfo = &swapchainImageInfo;
+        descriptorWrites[3].pImageInfo = &accumulatorImageInfo;
 
-        vkUpdateDescriptorSets(device, 4, descriptorWrites, 0, nullptr);
+        descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[4].dstSet = descriptorSets[i];
+        descriptorWrites[4].dstBinding = 4;
+        descriptorWrites[4].dstArrayElement = 0;
+        descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        descriptorWrites[4].descriptorCount = 1;
+        descriptorWrites[4].pImageInfo = &swapchainImageInfo;
+
+        vkUpdateDescriptorSets(device, 5, descriptorWrites, 0, nullptr);
     }
 
     return descriptorSets;
@@ -797,7 +818,7 @@ VkDescriptorPool createDescriptorPool(VkDevice device, int maxSets) {
     poolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSize[0].descriptorCount = maxSets;
     poolSize[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSize[1].descriptorCount = maxSets;
+    poolSize[1].descriptorCount = 2 * maxSets;
     poolSize[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     poolSize[2].descriptorCount = 2 * maxSets;
 

@@ -37,6 +37,8 @@ class RayTracerProgram {
     bool framebufferResized = false;
     timespec lastFrame;
 
+    std::function<std::vector<VkDescriptorSet>(VkDevice,uint)> createDescriptorSets;
+
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto app = reinterpret_cast<RayTracerProgram*>(glfwGetWindowUserPointer(window));
         app->framebufferResized = true;
@@ -64,7 +66,7 @@ class RayTracerProgram {
                             void*& shaderBufferMapped) {
 
         VkBuffer shaderBuffer;
-        VkDeviceSize size = 1024; // 1 KB
+        VkDeviceSize size = 2048; // 2 KB
 
         createBuffer(physicalDevice, device, size, 
                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
@@ -127,8 +129,12 @@ class RayTracerProgram {
         VkDescriptorPool descriptorPool = createDescriptorPool(device, swapChainImageViews.size());
         VkSampler sampler = createSampler(device);
 
-        computeDescriptorSets = createComputeDescriptorSets(device, computeDescriptorSetLayout, descriptorPool, uniformBuffer, computeSSBO, accumulatorView, swapChainImageViews, sampler);
         computeCommandBuffer = createCommandBuffer(device, commandPool);
+
+        // store in closure to be able to redefine later
+        createDescriptorSets = [computeDescriptorSetLayout, descriptorPool, uniformBuffer, computeSSBO, accumulatorView, swapChainImageViews, sampler]
+                               (VkDevice device, uint offset) 
+                               {return createComputeDescriptorSets(device, computeDescriptorSetLayout, descriptorPool, uniformBuffer, computeSSBO, offset, accumulatorView, swapChainImageViews, sampler);};
 
         createSyncObjects();
 
@@ -322,9 +328,9 @@ class RayTracerProgram {
         UniformBufferObject ubo {
             .resolution = glm::vec2(swapChainExtent.width, swapChainExtent.height),
             .viewportUv = glm::vec2(u, v),
-            .focalLength = 1.0,
+            .focalLength = 0.6,
             .focusDistance = 4.8,
-            .apertureRadius = 0.4,
+            .apertureRadius = 0.0,
             .time = frameCounter,
             .origin = origin,
             .rotation = glm::lookAt(glm::vec3(origin), glm::vec3(0, 0, -3.5), glm::vec3(0, 1, 0)),
@@ -335,61 +341,70 @@ class RayTracerProgram {
     }
 
     void pushWorldData(void* shaderBufferMemoryMap) {
-        SphereShaderBufferObject* sbo = reinterpret_cast<SphereShaderBufferObject*>(shaderBufferMemoryMap);
+        BufferBuilder infoBuffer = BufferBuilder {};
+        BufferBuilder triangleBuffer = BufferBuilder {};
 
-        auto none = glm::vec4(0);
+        infoBuffer.append(3); // mesh_count
+        infoBuffer.pad(12); // alignment rules
 
-        sbo->count = 7;
-        sbo->spheres[0].center = glm::vec3(3.0, 0.5, 5.0);
-        sbo->spheres[0].radius = 1.5;
-        sbo->spheres[0].material.emissiveStrength = none;
-        sbo->spheres[0].material.baseColor = glm::vec4(1, 0.1, 0.1, 0);
-        sbo->spheres[0].material.reflectivity = 1.0;
-        sbo->spheres[0].material.roughness = 0.003;
+        // Mesh 1: Ground sphere
+        infoBuffer.append((Mesh) {
+            .is_sphere = 1,
+            .sphere_radius = 99.0,
+            .triangle_count = 0,
+            .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
+            .material = {
+                .baseColor = glm::vec4(0.5, 0.5, 0.5, 1),
+                .emissiveStrength = glm::vec4(0),
+                .reflectivity = 1,
+                .roughness = 0,
+                .isGlass = false,
+                .ior = 0,
+                .shadeSmooth = false,
+            },
+        });
+        triangleBuffer.append(glm::vec3(0.0, -100.0, 5.0), sizeof(Triangle));
+        
+        // Mesh 2: Sun sphere
+        infoBuffer.append((Mesh) {
+            .is_sphere = true,
+            .sphere_radius = 200.0,
+            .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
+            .material = {
+                .emissiveStrength = glm::vec4(15.0, 15.0, 15.0, 1),
+            }
+        });
+        triangleBuffer.append(glm::vec3(-500.0, 200.0, 700.0), sizeof(Triangle));
 
-        sbo->spheres[1].center = glm::vec3(0.0, 0.0, 5.0);
-        sbo->spheres[1].radius = 1;
-        sbo->spheres[1].material.emissiveStrength = none;
-        sbo->spheres[1].material.baseColor = glm::vec4(0.48, 0.62, 0.89, 1);
-        sbo->spheres[1].material.baseColor = glm::vec4(1, 1, 1, 1);
-        sbo->spheres[1].material.reflectivity = 0.0;
-        sbo->spheres[1].material.roughness = 0.0;
-        sbo->spheres[1].material.isGlass = true;
-        sbo->spheres[1].material.ior = 1.45;
+        // Mesh 3: Test triangle
+        infoBuffer.append<Mesh>({
+            .is_sphere = false,
+            .triangle_count = 1,
+            .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
+            .material = {
+                .baseColor = glm::vec4(1.0, 1.0, 1.0, 1),
+                .emissiveStrength = glm::vec4(0),
+                .reflectivity = 0,
+                .roughness = 0,
+                .isGlass = true,
+                .ior = 1.4,
+                .shadeSmooth = false,
+            }
+        });
+        triangleBuffer.append<Triangle>({
+            .vertices = {
+                glm::vec4(-3.0, 0.4, 7.0, 0),
+                glm::vec4(2.0, -0.4, 3.0, 0),
+                glm::vec4(2.0, 1.0, 5.0, 0)
+            }
+        });
 
-        sbo->spheres[2].center = glm::vec3(0.0, -100.0, 5.0);
-        sbo->spheres[2].radius = 99.0;
-        sbo->spheres[2].material.emissiveStrength = none;
-        sbo->spheres[2].material.baseColor = glm::vec4(0.5, 0.5, 0.5, 1);
-        sbo->spheres[2].material.reflectivity = 0.0;
+        // create descriptor sets given known offset within the buffer
+        computeDescriptorSets = this->createDescriptorSets(device, infoBuffer.getOffset());
 
-        sbo->spheres[3].center = glm::vec3(-500.0, 200.0, 700.0);
-        sbo->spheres[3].radius = 200.0;
-        sbo->spheres[3].material.emissiveStrength = glm::vec4(15.0, 15.0, 15.0, 1);
-        sbo->spheres[3].material.baseColor = glm::vec4(1, 0.99, 0.9, 1);
-        sbo->spheres[3].material.reflectivity = 0.0;
-
-        sbo->spheres[4].center = glm::vec3(0.8, -1, 2.0);
-        sbo->spheres[4].radius = 0.3;
-        sbo->spheres[4].material.roughness = 0.25;
-        sbo->spheres[4].material.emissiveStrength = none;
-        sbo->spheres[4].material.baseColor = glm::vec4(0.1, 0.99, 0.6, 1);
-        sbo->spheres[4].material.reflectivity = 1.0;
-        sbo->spheres[4].material.isGlass = false;
-
-        sbo->spheres[5].center = glm::vec3(-1.6, -0.8, 3.0);
-        sbo->spheres[5].radius = 0.3;
-        sbo->spheres[5].material.roughness = 0;
-        sbo->spheres[5].material.isGlass = false;
-        sbo->spheres[5].material.emissiveStrength = none;
-        sbo->spheres[5].material.baseColor = glm::vec4(0, 0.5, 0.9, 1);
-
-        sbo->spheres[6].center = glm::vec3(-3.0, -0.4, 7.0);
-        sbo->spheres[6].radius = 0.8;
-        sbo->spheres[6].material.roughness = 0;
-        sbo->spheres[6].material.isGlass = false;
-        sbo->spheres[6].material.emissiveStrength = glm::vec4(2, 1.5, 0, 1);
-        sbo->spheres[6].material.baseColor = glm::vec4(1, 0.99, 0.9, 1);
+        // write to the gpu memory
+        infoBuffer.write(shaderBufferMemoryMap);
+        triangleBuffer.write(shaderBufferMemoryMap + infoBuffer.getOffset());
     }
 
     void createSyncObjects() {

@@ -20,19 +20,22 @@ struct Material {
     alignas(16) glm::vec4 emissiveStrength;
     alignas(4) float reflectivity;
     alignas(4) float roughness;
-    bool isGlass;
-    float ior;
+    alignas(4) bool isGlass;
+    alignas(4) float ior;
+    alignas(4) bool shadeSmooth;
 };
 
-struct Sphere {
-    float radius;
-    alignas(16) glm::vec3 center;
-    struct Material material;
+struct Triangle {
+    alignas(16) glm::vec4 vertices[3];
+    alignas(16) glm::vec4 normals[3];
 };
 
-struct SphereShaderBufferObject {
-    uint32_t count;
-    Sphere spheres[];
+struct Mesh {
+    int is_sphere;
+    float sphere_radius;
+    uint triangle_count;
+    uint offset;
+    Material material;
 };
 
 struct SwapChainSupportDetails {
@@ -115,6 +118,7 @@ std::vector<VkDescriptorSet> createComputeDescriptorSets(VkDevice device,
                                            VkDescriptorPool descriptorPool,
                                            VkBuffer uniformBuffer,
                                            VkBuffer shaderBuffer,
+                                           uint offset,
                                            VkImageView accumulatorImageView,
                                            std::vector<VkImageView> swapChainImageViews,
                                            VkSampler sampler);
