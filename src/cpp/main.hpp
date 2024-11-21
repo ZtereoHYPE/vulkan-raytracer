@@ -24,9 +24,9 @@ struct Material {
     alignas(16) glm::vec4 emissiveStrength;
     alignas(4) float reflectivity;
     alignas(4) float roughness;
-    alignas(4) bool isGlass;
+    alignas(4) int isGlass; // todo: figure out why booleans don't work
     alignas(4) float ior;
-    alignas(4) bool shadeSmooth;
+    alignas(4) int shadeSmooth;
 };
 
 struct Triangle {
@@ -34,9 +34,12 @@ struct Triangle {
     alignas(16) glm::vec4 normals[3];
 };
 
+struct Sphere {
+    alignas(16) glm::vec3 center;
+    alignas(16) float radius;
+};
+
 struct Mesh {
-    int is_sphere;
-    float sphere_radius;
     uint triangle_count;
     uint offset;
     Material material;

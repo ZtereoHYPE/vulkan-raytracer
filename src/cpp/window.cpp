@@ -1,14 +1,5 @@
 #include "window.hpp"
 
-// todo: switch to a real callback
-void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-    auto ctx = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
-
-    if (ctx->resizedCallback != nullptr) {
-        *(ctx->resizedCallback) = true;
-    }
-}
-
 Window::Window(const char *title, int initialWidth, int initialHeight) {
     glfwInit();
 
@@ -17,7 +8,6 @@ Window::Window(const char *title, int initialWidth, int initialHeight) {
     auto glfwWindow = glfwCreateWindow(initialWidth, initialHeight, title, nullptr, nullptr);
 
     glfwSetWindowUserPointer(glfwWindow, this);
-    glfwSetFramebufferSizeCallback(glfwWindow, framebufferResizeCallback);
 
     this->glfwWindow = glfwWindow;
 
@@ -27,10 +17,6 @@ Window::Window(const char *title, int initialWidth, int initialHeight) {
 void Window::terminate() {
     glfwDestroyWindow(this->glfwWindow);
     glfwTerminate();
-}
-
-void Window::setResizedCallbackVariable(bool* callback) {
-    resizedCallback = callback;
 }
 
 void Window::getFramebufferSize(int *width, int *height) {

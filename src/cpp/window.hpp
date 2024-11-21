@@ -7,7 +7,6 @@
 
 struct Window {
     GLFWwindow* glfwWindow;
-    bool* resizedCallback = nullptr;
 
     static std::vector<const char*> getRequiredExtensions();
 
@@ -15,7 +14,6 @@ struct Window {
     Window(const Window &obj) = delete; // do not allow copies of this class
 
     VkSurfaceKHR createVulkanSurface(VkInstance instance);
-    void setResizedCallbackVariable(bool* callback);
     void getFramebufferSize(int *width, int *height);
     void waitEvents();
     void pollEvents();

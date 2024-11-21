@@ -5,7 +5,6 @@ const int TILE_SIZE = 16;
 class RayTracerProgram {
    public:
     void run() {
-        window.setResizedCallbackVariable(&framebufferResized);
         initVulkan();
         mainLoop();
         //cleanup();
@@ -33,16 +32,12 @@ class RayTracerProgram {
     void* uniformMemoryMap;
     void* computeSSBOMemoryMap;
 
+    // performance measure
     uint32_t frameCounter = 0;
-    bool framebufferResized = false;
-    timespec lastFrame;
+    std::chrono::_V2::system_clock::time_point lastFrame = std::chrono::high_resolution_clock::now();
+    float avgFps = 120;
 
     std::function<std::vector<VkDescriptorSet>(VkDevice,uint)> createDescriptorSets;
-
-    static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-        auto app = reinterpret_cast<RayTracerProgram*>(glfwGetWindowUserPointer(window));
-        app->framebufferResized = true;
-    }
 
     void initVulkan() {
         VkInstance instance = createInstance();
@@ -107,7 +102,7 @@ class RayTracerProgram {
         pushWorldData(computeSSBOMemoryMap);
 
         while (!window.shouldClose()) {
-            glfwPollEvents();
+            window.pollEvents();
             drawFrame();
         }
 
@@ -117,6 +112,17 @@ class RayTracerProgram {
     
     
     void drawFrame() {
+        // Frame time calculations
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto duration = duration_cast<std::chrono::milliseconds>(currentTime - lastFrame);
+
+        auto fps = 1000.0 / duration.count();
+        // do not take into account spurious frames
+        if (fps < avgFps + 100) 
+            avgFps = (avgFps * (frameCounter) + fps) / (frameCounter + 1);
+
+        std::cout << "FPS/avg: " << fps << '/' << avgFps << std::endl;
+        lastFrame = currentTime;
 
         /* COMPUTE SUBMISSION */
 
@@ -180,8 +186,7 @@ class RayTracerProgram {
         result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
         // Here there are no consequences as we already presented the frame, so suboptimal = bad
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-            framebufferResized = false;
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
             //recreateSwapChain(window, physicalDevice, device, surface, swapChain, renderPass,);
         } else if (result != VK_SUCCESS) {
             throw std::runtime_error("failed to present swap chain image!");
@@ -311,55 +316,86 @@ class RayTracerProgram {
 
         // Mesh 1: Ground sphere
         infoBuffer.append((Mesh) {
-            .is_sphere = 1,
-            .sphere_radius = 99.0,
-            .triangle_count = 0,
+            .triangle_count = 0, // sphere
             .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
             .material = {
-                .baseColor = glm::vec4(0.5, 0.5, 0.5, 1),
+                .baseColor = glm::vec4(0.7, 0.7, 0.7, 1),
                 .emissiveStrength = glm::vec4(0),
-                .reflectivity = 1,
+                .reflectivity = 0,
+                .roughness = 0,
+                .isGlass = 0,
+                .ior = 0,
+                .shadeSmooth = 0,
+            },
+        });
+        // radius is first component of second vec3 of triangle
+        triangleBuffer.append<Sphere>({
+            .center = glm::vec3(0.0, -100.0, 5.0),
+            .radius = 99.0
+        }, sizeof(Triangle));
+        
+        // Mesh 2: Sun sphere
+        infoBuffer.append((Mesh) {
+            .triangle_count = 0, // sphere
+            .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
+            .material = {
+                .emissiveStrength = glm::vec4(15.0, 15.0, 15.0, 1),
+                .reflectivity = 0,
                 .roughness = 0,
                 .isGlass = false,
                 .ior = 0,
                 .shadeSmooth = false,
-            },
-        });
-        triangleBuffer.append(glm::vec3(0.0, -100.0, 5.0), sizeof(Triangle));
-        
-        // Mesh 2: Sun sphere
-        infoBuffer.append((Mesh) {
-            .is_sphere = true,
-            .sphere_radius = 200.0,
-            .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
-            .material = {
-                .emissiveStrength = glm::vec4(15.0, 15.0, 15.0, 1),
             }
         });
-        triangleBuffer.append(glm::vec3(-500.0, 200.0, 700.0), sizeof(Triangle));
+        triangleBuffer.append<Sphere>({
+            .center = glm::vec3(-500.0, 200.0, 700.0),
+            .radius = 200.0
+        }, sizeof(Triangle));
 
-        // Mesh 3: Test triangle
+        // Mesh 3: Test cube
         infoBuffer.append<Mesh>({
-            .is_sphere = false,
-            .triangle_count = 1,
+            .triangle_count = 10,
             .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
             .material = {
-                .baseColor = glm::vec4(1.0, 1.0, 1.0, 1),
+                .baseColor = glm::vec4(0.7, 0.1, 0.1, 1),
                 .emissiveStrength = glm::vec4(0),
                 .reflectivity = 0,
                 .roughness = 0,
-                .isGlass = true,
+                .isGlass = false,
                 .ior = 1.4,
                 .shadeSmooth = false,
             }
         });
-        triangleBuffer.append<Triangle>({
-            .vertices = {
-                glm::vec4(-3.0, 0.4, 7.0, 0),
-                glm::vec4(2.0, -0.4, 3.0, 0),
-                glm::vec4(2.0, 1.0, 5.0, 0)
-            }
-        });
+
+        int triangles[] = {
+            //0,0,0, 1,1,0, 1,0,0,
+            //0,0,0, 0,1,0, 1,1,0,
+
+            1,0,0, 1,1,1, 1,0,1,
+            1,0,0, 1,1,0, 1,1,1,
+
+            1,0,1, 0,1,1, 1,1,1,
+            1,0,1, 0,0,1, 0,1,1,
+
+            0,0,1, 0,1,0, 0,0,0,
+            0,0,1, 0,1,1, 0,1,0,
+
+            0,1,0, 1,1,1, 1,1,0,
+            0,1,0, 0,1,1, 1,1,1,
+
+            0,0,0, 1,0,1, 1,0,0,
+            0,0,0, 0,0,1, 1,0,1,
+        };
+
+        for (int triangle = 0; triangle < 10; triangle++) {
+            triangleBuffer.append<Triangle>({
+                .vertices = {
+                    glm::vec4(-1.0 + triangles[triangle * 9 + 0] * 2, -1.0 + triangles[triangle * 9 + 1] * 2, 3.0 + triangles[triangle * 9 + 2] * 2, 0),
+                    glm::vec4(-1.0 + triangles[triangle * 9 + 3] * 2, -1.0 + triangles[triangle * 9 + 4] * 2, 3.0 + triangles[triangle * 9 + 5] * 2, 0),
+                    glm::vec4(-1.0 + triangles[triangle * 9 + 6] * 2, -1.0 + triangles[triangle * 9 + 7] * 2, 3.0 + triangles[triangle * 9 + 8] * 2, 0),
+                }
+            });
+        }
 
         // create descriptor sets given known offset within the buffer
         computeDescriptorSets = this->createDescriptorSets(device, infoBuffer.getOffset());
@@ -367,6 +403,20 @@ class RayTracerProgram {
         // write to the gpu memory
         infoBuffer.write(shaderBufferMemoryMap);
         triangleBuffer.write(shaderBufferMemoryMap + infoBuffer.getOffset());
+
+        /* Debug code 
+         *  printf("Pushed mem layout: \n");
+         *  printf(":----------infoBuffer---------: \n");
+         *  for (int i = 0; i < (infoBuffer.getOffset() + triangleBuffer.getOffset()) / 4; i++) {
+         *      if ((i * 4 == infoBuffer.getOffset()))
+         *          printf(":----------dataBuffer---------: \n");
+         *          
+         *      printf("%d /", ((int *)shaderBufferMemoryMap)[i]);
+         *      printf(" %.2f ", ((float *)shaderBufferMemoryMap)[i]);
+         *      printf("\n");
+         *  }
+         *  printf(":----------------------------: \n");
+         */
     }
 
     void createSyncObjects() {
