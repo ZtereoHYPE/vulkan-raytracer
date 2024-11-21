@@ -8,18 +8,17 @@
 struct Window {
     GLFWwindow* glfwWindow;
     bool* resizedCallback = nullptr;
-    std::unordered_map<int, bool*> keypressCallbacks;
+
+    static std::vector<const char*> getRequiredExtensions();
 
     Window(const char *title, int initialWidth, int initialHeight);
     Window(const Window &obj) = delete; // do not allow copies of this class
+
+    VkSurfaceKHR createVulkanSurface(VkInstance instance);
     void setResizedCallbackVariable(bool* callback);
     void getFramebufferSize(int *width, int *height);
     void waitEvents();
     void pollEvents();
     bool shouldClose();
-    void setKeypressCallback(int key, bool *callback);
     void terminate();
 };
-
-VkSurfaceKHR createVulkanWindowSurface(Window* window, VkInstance instance);
-

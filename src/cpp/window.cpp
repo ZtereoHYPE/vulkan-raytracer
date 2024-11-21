@@ -9,21 +9,6 @@ void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
     }
 }
 
-void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    auto ctx = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
-    
-    if (ctx->keypressCallbacks.contains(key)) {
-        if (action == GLFW_PRESS) {
-            *ctx->keypressCallbacks[key] = true;
-        } else if (action == GLFW_RELEASE) {
-            *ctx->keypressCallbacks[key] = false;
-        } else {
-            printf("Unknown action encountered!");
-        }
-    }
-}
-
-
 Window::Window(const char *title, int initialWidth, int initialHeight) {
     glfwInit();
 
@@ -33,7 +18,6 @@ Window::Window(const char *title, int initialWidth, int initialHeight) {
 
     glfwSetWindowUserPointer(glfwWindow, this);
     glfwSetFramebufferSizeCallback(glfwWindow, framebufferResizeCallback);
-    glfwSetKeyCallback(glfwWindow, keyCallback);
 
     this->glfwWindow = glfwWindow;
 
@@ -65,16 +49,22 @@ bool Window::shouldClose() {
     return glfwWindowShouldClose(glfwWindow);
 }
 
-void Window::setKeypressCallback(int key, bool *callback) {
-    keypressCallbacks[key] = callback;
-}
-
-VkSurfaceKHR createVulkanWindowSurface(Window* window, VkInstance instance) {
+VkSurfaceKHR Window::createVulkanSurface(VkInstance instance) {
     VkSurfaceKHR surface;
 
-    if (glfwCreateWindowSurface(instance, window->glfwWindow, nullptr, &surface) != VK_SUCCESS) {
+    if (glfwCreateWindowSurface(instance, glfwWindow, nullptr, &surface) != VK_SUCCESS) {
         std::runtime_error("Failed to create window surface!");
     }
 
     return surface;
+}
+
+std::vector<const char*> Window::getRequiredExtensions() {
+    uint32_t count = 0;
+    const char** glfwExtensions;
+    glfwExtensions = glfwGetRequiredInstanceExtensions(&count);
+
+    std::vector<const char*> extensions(glfwExtensions, glfwExtensions + count);
+
+    return extensions;
 }
