@@ -2,7 +2,7 @@
 CXX := g++
 CXXFLAGS := -std=c++20 -g -Wno-pointer-arith
 #CXXFLAGS := -std=c++20 -O2 -flto
-LDFLAGS := -lglfw3 -lvulkan -ldl -lpthread -lwayland-client
+LDFLAGS := -lglfw3 -lvulkan -ldl
 SHADER_COMPILER := glslc
 
 # Directories
@@ -30,6 +30,7 @@ TARGET := VulkanTest
 
 # Rules
 all: $(TARGET) run
+compile: $(TARGET)
 
 $(TARGET): $(OBJ_FILES) $(COMPILED_COMPUTE_SHADERS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJ_FILES) $(LDFLAGS)
