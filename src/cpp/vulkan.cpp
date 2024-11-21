@@ -1,22 +1,25 @@
 #include "vulkan.hpp"
 
+/* Vulkan parameters
+ *
+ * USE_LLVMPIPE forces the rendering to happen on the CPU
+ * VALIDATION_LAYERS_ENABLE enables vulkan validation layers 
+ */
 const bool USE_LLVMPIPE = false;
+const bool VALIDATION_LAYERS_ENABLE = true;
 
-#ifdef NDEBUG
-const bool enableValidationLayers = false;
-#else
-const bool enableValidationLayers = true;
-#endif
-
+// add "VK_LAYER_LUNARG_api_dump" to dump Vulkan calls in stdout
 const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};
-//const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation", "VK_LAYER_LUNARG_api_dump"};
-
 const std::vector<const char*> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-
-// Retrieved function pointers
-// todo: make the variables static such that they only have to retrieved on the first call
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+/* 
+ * Retrieves the pointer to the debug messenger creation function.
+ *
+ * Such function has to be retrieved because it's a vulkan extension so it's not
+ * included by default in the header.
+ */
+VkResult createDebugUtilsMessengerEXT(VkInstance instance, 
+                                      const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
                                       const VkAllocationCallbacks* pAllocator,
                                       VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -28,7 +31,10 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
     }
 }
 
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
+/* 
+ * Retrieves pointer to debug messenger destructor function. 
+ */
+void destroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
                                    const VkAllocationCallbacks* pAllocator) {
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
 
@@ -37,15 +43,14 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
-bool QueueFamilyIndices::isComplete() {
-    return graphicsFamily.has_value() && computeFamily.has_value() && presentFamily.has_value();
-}
-
+/* 
+ * Creates a Vulkan instance 
+ */
 VkInstance createInstance() {
     // info about program
     VkApplicationInfo appInfo {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Hello woooorld";
+    appInfo.pApplicationName = "Vulkan RayTracer";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "No Engine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -56,22 +61,23 @@ VkInstance createInstance() {
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 
-    auto requiredExts = getRequiredExtensions();
-
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExts.size());
-    createInfo.ppEnabledExtensionNames = requiredExts.data();
+    auto requiredExts = Window::getRequiredExtensions();
 
     // validation layers
-    if (enableValidationLayers) {
+    if (VALIDATION_LAYERS_ENABLE) {
         if (!allValidationLayersSupported(validationLayers)) {
-            throw new std::runtime_error("Some validation layers i need aren't supported");
+            throw new std::runtime_error("Some validation layers needed aren't supported");
         }
 
+        requiredExts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
     } else {
         createInfo.enabledLayerCount = 0;
     }
+
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExts.size());
+    createInfo.ppEnabledExtensionNames = requiredExts.data();
 
     // create actual instance
     VkInstance instance;
@@ -84,21 +90,9 @@ VkInstance createInstance() {
     return instance;
 }
 
-// todo: this could be moved to the glfw stuff as it's the extensions required by glfw
-std::vector<const char*> getRequiredExtensions() {
-    uint32_t count = 0;
-    const char** glfwExtensions;
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&count);
-
-    std::vector<const char*> extensions(glfwExtensions, glfwExtensions + count);
-
-    if (enableValidationLayers) {
-        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-
-    return extensions;
-}
-
+/* 
+ * Checks if all given validation layers are supported by the current instance 
+ */
 bool allValidationLayersSupported(std::vector<const char*> validationLayers) {
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -125,9 +119,11 @@ bool allValidationLayersSupported(std::vector<const char*> validationLayers) {
     return true;
 }
 
-// todo: we might have to keep the debug messenger to free it later
+/* 
+ * Creates a debug messenger and configures it to show detailed errors 
+ */
 VkDebugUtilsMessengerEXT setupDebugMessenger(VkInstance instance) {
-    if (!enableValidationLayers) return nullptr;
+    if (!VALIDATION_LAYERS_ENABLE) return nullptr;
 
     VkDebugUtilsMessengerCreateInfoEXT createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -141,7 +137,7 @@ VkDebugUtilsMessengerEXT setupDebugMessenger(VkInstance instance) {
     createInfo.pUserData = nullptr;
 
     VkDebugUtilsMessengerEXT debugMessenger;
-    if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
+    if (createDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS) {
         throw std::runtime_error("failed to set up debug messenger!");
     }
 
@@ -150,12 +146,18 @@ VkDebugUtilsMessengerEXT setupDebugMessenger(VkInstance instance) {
     return debugMessenger;
 }
 
+/* 
+ * This function serves as a function pointer to be called by the debug messenger
+ * whenver a log needs to be printed.
+ *
+ * Only prints something if the message is of WARNING priority or above.
+ */
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                                                    VkDebugUtilsMessageTypeFlagsEXT messageType,
-                                                    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-                                                    void* pUserData) {
+                                             VkDebugUtilsMessageTypeFlagsEXT messageType,
+                                             const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                                             void* pUserData) {
     if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-        std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+        std::cerr << "validation layer: " << std::endl << pCallbackData->pMessage << std::endl;
     }
 
     return VK_FALSE;
@@ -164,6 +166,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
 /* 
  * Picks the best physical device to present to the created surface.
  * Depends on the surface because a specific device might not be able to present on one.
+ *
+ * Which device gets picked depends on a score assigned to it by getDeviceScore().
  */
 VkPhysicalDevice pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface) {
     uint32_t deviceCount = 0;
@@ -230,7 +234,7 @@ int isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) {
 }
 
 /* 
- * Checks if a device supports all the given extensions
+ * Checks if a physical device supports all the given extensions.
  */
 bool checkDeviceExtensionSupport(VkPhysicalDevice device, std::vector<const char*> deviceExtensions) {
     uint32_t extensionCount;
@@ -249,6 +253,9 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device, std::vector<const char
     return requiredExtensions.empty();
 }
 
+/*
+ * Checks what capabilities and formats are supported by the device's SwapChain.
+ */
 SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
     SwapChainSupportDetails details;
 
@@ -273,6 +280,13 @@ SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurface
     return details;
 }
 
+/*
+ * Gives a score to a physical device for rendering to a certain surface.
+ * 
+ * If LLVMPIPE is needed, then its corresponding "device" gets maximum score.
+ * Else, discrete graphics cards get a higher score, followed by the various
+ * queues being in the same family.
+ */
 int getDeviceScore(VkPhysicalDevice device, VkSurfaceKHR surface) {
     // discrete GPUs get the absolute priority
     VkPhysicalDeviceProperties deviceProperties;
@@ -281,7 +295,7 @@ int getDeviceScore(VkPhysicalDevice device, VkSurfaceKHR surface) {
 
     // devices whose queues are in the same family are better
     QueueFamilyIndices indices = findQueueFamilies(device, surface);
-    bool queuesInSameFamily = (indices.graphicsFamily == indices.presentFamily);
+    bool queuesInSameFamily = indices.areDifferent();
 
     // if we need LLVMpipe then it gets the highest priority
     bool isLlvmpipe = !strcmp(deviceProperties.deviceName, "llvmpipe (LLVM 19.1.0, 256 bits)");
@@ -292,6 +306,10 @@ int getDeviceScore(VkPhysicalDevice device, VkSurfaceKHR surface) {
     return score;
 }
 
+/*
+ * Finds a device's queue family indices, including whether the device supports
+ * presenting to the given surface.
+ */
 QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
     QueueFamilyIndices indices = {0};
 
@@ -303,10 +321,6 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surfa
 
     int family = 0;
     for (const auto& queueFamily : queueFamilies) {
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            indices.graphicsFamily = family;
-        }
-
         if (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT) {
             indices.computeFamily = family;
         }
@@ -321,7 +335,7 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surfa
         family++;
 
         // we stop once found all the needed queue families
-        if (indices.computeFamily.has_value() && indices.graphicsFamily.has_value() && indices.presentFamily.has_value()) {
+        if (indices.computeFamily.has_value() && indices.presentFamily.has_value()) {
             break;
         }
     }
@@ -329,14 +343,18 @@ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surfa
     return indices;
 }
 
+/*
+ * Creates a logical device from the given physical device and chosen queue 
+ * family indices. This device represents the interface between our program and
+ * the GPU.
+ */
 VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, QueueFamilyIndices queueIndices) {
     // create a queueCreateInfo for each of the required ones
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 
     std::set<uint32_t> uniqueQueueFamilies = {
-        queueIndices.graphicsFamily.value(), 
         queueIndices.presentFamily.value(),
-        //queueIndices.computeFamily.value()
+        queueIndices.computeFamily.value()
     };
 
     float queuePriority = 1.0f;
@@ -360,7 +378,7 @@ VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, QueueFamilyIndices
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();
 
     // these are ignored and only set for compatibility purposes
-    if (enableValidationLayers) {
+    if (VALIDATION_LAYERS_ENABLE) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
     } else {
@@ -376,17 +394,22 @@ VkDevice createLogicalDevice(VkPhysicalDevice physicalDevice, QueueFamilyIndices
     return device;
 }
 
+/*
+ * Creates a SwapChain of images used to present frames to the screen.
+ *
+ * Returns the swapchain handle, its images, their formats, and their extents.
+ * The extents represent the dimentions of the images.
+ */
 VkSwapchainKHR createSwapChain(Window *window,
                                VkPhysicalDevice physicalDevice,
                                VkDevice device,
-                               VkSurfaceKHR surface, 
+                               VkSurfaceKHR surface,
+                               QueueFamilyIndices queueFamilies,
                                std::vector<VkImage>& swapChainImages, 
                                VkFormat& swapChainImageFormat, 
-                               VkExtent2D& swapChainExtent,
-                               QueueFamilyIndices queueFamilies) {
+                               VkExtent2D& swapChainExtent) {
 
     SwapChainSupportDetails details = querySwapChainSupport(physicalDevice, surface);
-
 
     if (!(details.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_SAMPLED_BIT) 
         || !(details.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_STORAGE_BIT)) {
@@ -413,12 +436,12 @@ VkSwapchainKHR createSwapChain(Window *window,
     createInfo.imageExtent = swapChainExtent;
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_STORAGE_BIT;
-    createInfo.clipped = VK_FALSE; // for temporal effects the whole image needs to be rendered
+    createInfo.clipped = VK_FALSE; // we want the whole image to be rendered
 
     // if an image owned by single queue family, no need to check for implicit transfers: best performance
     //  might be interesting starting point to look into gpu archtectures
-    if (queueFamilies.graphicsFamily != queueFamilies.presentFamily != queueFamilies.computeFamily) {
-        uint32_t queueFamilyIndices[] = {queueFamilies.graphicsFamily.value(), queueFamilies.presentFamily.value(), queueFamilies.computeFamily.value()};
+    if (queueFamilies.areDifferent()) {
+        uint32_t queueFamilyIndices[] = {queueFamilies.presentFamily.value(), queueFamilies.computeFamily.value()};
 
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; 
         createInfo.queueFamilyIndexCount = 3;
@@ -453,6 +476,9 @@ VkSwapchainKHR createSwapChain(Window *window,
     return swapChain;
 }
 
+/*
+ * Returns the image/color format to be used by the SwapChain images.
+ */
 VkSurfaceFormatKHR chooseSwapSurfaceMode(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
     for (const auto& availableFormat : availableFormats) {
         if (availableFormat.format == VK_FORMAT_R8G8B8A8_UNORM && // changed to supported format for compute shaders
@@ -465,6 +491,12 @@ VkSurfaceFormatKHR chooseSwapSurfaceMode(const std::vector<VkSurfaceFormatKHR>& 
     return availableFormats[0];
 }
 
+/*
+ * Returns the extent (dimentions) that the swapchain images will have.
+ *
+ * This function makes sure that the created images won't be larger than what the
+ * GPU can support.
+ */
 VkExtent2D chooseSwapExtent(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, Window *window, const VkSurfaceCapabilitiesKHR& capabilities) {
     // 0xFFFFFFFF -> "the surface size/ will be determined by the extent of a swapchain targeting it"
     if (capabilities.currentExtent.width != -1) {
@@ -485,6 +517,10 @@ VkExtent2D chooseSwapExtent(VkPhysicalDevice physicalDevice, VkSurfaceKHR surfac
     }
 }
 
+/*
+ * Creates the Image Views for given swapchain images to be able to read and 
+ * write to them.
+ */
 std::vector<VkImageView> createSwapchainViews(VkDevice device, std::vector<VkImage> swapChainImages, VkFormat swapChainImageFormat) {
     std::vector<VkImageView> swapChainImageViews;
     swapChainImageViews.resize(swapChainImages.size());
@@ -512,6 +548,12 @@ std::vector<VkImageView> createSwapchainViews(VkDevice device, std::vector<VkIma
     return swapChainImageViews;
 }
 
+/*
+ * Creates an Image of a given size, allocates its memory, and creates a 
+ * VkImageView to be able to read and write said image.
+ * 
+ * Images created by this can be used both for storage and for sampling.
+ */
 VkImage createImage(VkPhysicalDevice physicalDevice, VkDevice device, VkExtent2D extent, VkFormat format, VkImageView &imageView, VkDeviceMemory &imageMemory) {
     VkImageCreateInfo imageInfo {};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -523,6 +565,8 @@ VkImage createImage(VkPhysicalDevice physicalDevice, VkDevice device, VkExtent2D
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; // only ever accessed by 1 family at a time
+
+    // todo: some images are just one or the other
     imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT; // both stored to and sampled
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -565,6 +609,54 @@ VkImage createImage(VkPhysicalDevice physicalDevice, VkDevice device, VkExtent2D
     return image;
 }
 
+/*
+ * Creates a buffer ready to be used as Uniform Buffer.
+ */
+VkBuffer createUniformBuffer(VkPhysicalDevice physicalDevice, 
+                                VkDevice device, 
+                                VkDeviceSize size,
+                                VkDeviceMemory &uniformBufferMemory,
+                                void* &uniformBuffersMap) {
+
+    VkBuffer uniformBuffer = createBuffer(physicalDevice, 
+                                          device,
+                                          size, 
+                                          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
+                                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+                                          uniformBufferMemory);
+
+    vkMapMemory(device, uniformBufferMemory, 0, size, 0, &uniformBuffersMap);
+
+    return uniformBuffer;
+}
+
+/*
+ * Creates a buffer ready to be used as a Shader Buffer Object.
+ */
+VkBuffer createShaderBuffer(VkPhysicalDevice physicalDevice, 
+                            VkDevice device, 
+                            VkDeviceSize size,
+                            VkDeviceMemory& shaderBufferMemory, 
+                            void*& shaderBufferMapped) {
+
+    VkBuffer shaderBuffer = createBuffer(physicalDevice, 
+                                         device, 
+                                         size, 
+                                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
+                                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                         shaderBufferMemory);
+                         
+    vkMapMemory(device, shaderBufferMemory, 0, VK_WHOLE_SIZE, 0, &shaderBufferMapped);
+
+    memset(shaderBufferMapped, 0, size);
+
+    return shaderBuffer;
+}
+
+/*
+ * Creates a basic 2D image sampler with nearest neighbour sampling, no mipmaps,
+ * and clamping the coordinates withing the image's size.
+ */
 VkSampler createSampler(VkDevice device) {
     VkSamplerCreateInfo samplerInfo {};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -590,6 +682,10 @@ VkSampler createSampler(VkDevice device) {
     return sampler;
 }
 
+/*
+ * Allocates a command buffer for a specific command pool to store all the
+ * to-be-submitted commands.
+ */
 VkCommandBuffer createCommandBuffer(VkDevice device, VkCommandPool commandPool) {
     VkCommandBufferAllocateInfo allocInfo {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -606,6 +702,10 @@ VkCommandBuffer createCommandBuffer(VkDevice device, VkCommandPool commandPool) 
     return commandBuffer;
 }
 
+/*
+ * Creates the layout that the descriptor sets will have on the shader, describing
+ * how and where each of them will be bound.
+ */
 VkDescriptorSetLayout createComputeDescriptorSetLayout(VkDevice device) {
     // This uniform will contain the camera data
     VkDescriptorSetLayoutBinding uboLayoutBinding {};
@@ -659,6 +759,20 @@ VkDescriptorSetLayout createComputeDescriptorSetLayout(VkDevice device) {
     return layout;
 }
 
+/*
+ * Creates the descriptor sets required for the compute shader to execute.
+ *
+ * There are 5 descriptors for each of the swapchain images:
+ *  - Uniform Buffer: Stores and binds the uniform data to the shader
+ *  - Mesh Info Buffer: Shader Buffer Object storing information about the meshes to be rendered.
+ *  - Triangle Buffer: Shader Buffer Object storing triangles or sphere coordinates.
+ *  - Accumulator Image: Image used to accumulate ray traced frames.
+ *  - SwapChain Image: Image acquired from the SwapChain to be able to output those frames
+ *                     directly from the compute shader.
+ * 
+ * Note that Mesh Info and Triangle descriptors point to the same buffer in the GPU memory,
+ * just with an offset that gets decided at runtime depending on the mesh data.
+ */
 std::vector<VkDescriptorSet> createComputeDescriptorSets(VkDevice device, 
                                                          VkDescriptorSetLayout descriptorSetLayout, 
                                                          VkDescriptorPool descriptorPool,
@@ -761,6 +875,12 @@ std::vector<VkDescriptorSet> createComputeDescriptorSets(VkDevice device,
     return descriptorSets;
 }
 
+/*
+ * Creates a basic compute pipeline and returns it and its layout.
+ *
+ * The pipeline entrypoint is a shader called "main.comp" and located in 
+ * build/shaders/main.comp.spv
+ */
 VkPipeline createComputePipeline(VkDevice device,
                                  VkDescriptorSetLayout descriptorSetLayout,
                                  VkPipelineLayout& pipelineLayout) {
@@ -799,6 +919,9 @@ VkPipeline createComputePipeline(VkDevice device,
     return computePipeline;
 }
 
+/*
+ * Creates a vulkan shader module for a device from given spir-v code.
+ */
 VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code) {
     VkShaderModuleCreateInfo createInfo {};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -813,6 +936,9 @@ VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code
     return shader;
 }
 
+/*
+ * Creates a descriptor pool ready for all the required descriptor sets.
+ */
 VkDescriptorPool createDescriptorPool(VkDevice device, int maxSets) {
     VkDescriptorPoolSize poolSize[3];
     poolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -836,6 +962,11 @@ VkDescriptorPool createDescriptorPool(VkDevice device, int maxSets) {
     return descriptorPool;
 }
 
+/*
+ * Helper function to begin a single-time command to the GPU.
+ *
+ * Used for setting up images or buffers.
+ */
 VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool) {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -855,6 +986,11 @@ VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool commandPo
     return commandBuffer;
 }
 
+/*
+ * Helper function to end and issue a single-time command to the GPU.
+ *
+ * Used for setting up images or buffers.
+ */
 void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkCommandBuffer commandBuffer) {
     vkEndCommandBuffer(commandBuffer);
 
@@ -869,6 +1005,12 @@ void endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue q
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
+/*
+ * Issues a command to copy a buffer from a source to a destination.
+ *
+ * Should only be used while setting up the vulkan context and not while drawing
+ * frames.
+ */
 void copyBuffer(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkBuffer src, VkBuffer dst, VkDeviceSize size) {
     // we need to create a command buffer to submit a command to do this
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
@@ -880,7 +1022,15 @@ void copyBuffer(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkBuf
     endSingleTimeCommands(device, commandPool, queue, commandBuffer);
 }
 
-void createBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
+/*
+ * Creates a buffer of given size, properties, and adequate to a given set of
+ * usages.
+ * 
+ * Returns the buffer and its bound VkDeviceMemory object.
+ */
+VkBuffer createBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size, VkBufferUsageFlags usageFlags, VkMemoryPropertyFlags properties, VkDeviceMemory& bufferMemory) {
+    VkBuffer buffer;
+    
     VkBufferCreateInfo bufferInfo {};
 
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -907,8 +1057,17 @@ void createBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize
 
     // bind it to our buffer
     vkBindBufferMemory(device, buffer, bufferMemory, 0); // we can set an offset
+
+    return buffer;
 }
 
+/*
+ * Issues a command to initially transition an image to a required
+ * layout.
+ * 
+ * Should only be used while setting up the vulkan context and not while drawing
+ * frames.
+ */
 void transitionImageLayout(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout) {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
 
@@ -944,6 +1103,10 @@ void transitionImageLayout(VkDevice device, VkCommandPool commandPool, VkQueue q
     endSingleTimeCommands(device, commandPool, queue, commandBuffer);
 }
 
+/*
+ * Finds a suitable memory type amongst physicalDevice's supported ones given a 
+ * list of properties it should have. Used to create efficient buffers.
+ */
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t suitableMemoryTypes, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties memProperties;
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
@@ -958,13 +1121,20 @@ uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t suitableMemory
     throw std::runtime_error("failed to find suitable memory type!");
 }
 
-VkCommandPool createCommandPool(VkDevice device, VkPhysicalDevice physicalDevice, QueueFamilyIndices queueFamilyIndices) {
+/*
+ * Creates command pools for the various queues that we will submit to.
+ *
+ * The array contains first the compute command pool, and next the presentation one.
+ * If the indices are the same, then the array will contain 2 copies of the same VkCommandPool.
+ */
+VkCommandPool createCommandPool(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex) {
+    VkCommandPool commandPool;
+
     VkCommandPoolCreateInfo poolInfo {};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT; // command buffers can be rerecorded individually
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value(); // assumes that all the queues are in the same family
+    poolInfo.queueFamilyIndex = queueFamilyIndex;
 
-    VkCommandPool commandPool;
     if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
         throw std::runtime_error("failed to create command pool!");
     }
@@ -973,38 +1143,9 @@ VkCommandPool createCommandPool(VkDevice device, VkPhysicalDevice physicalDevice
     return commandPool;
 }
 
-// todo: this is suboptimal: we could reuse the old swapchain when recreating which allows to do it in-flight
-//void recreateSwapChain(Window window, 
-//                       VkPhysicalDevice physicalDevice, 
-//                       VkDevice device, 
-//                       VkSurfaceKHR surface, 
-//                       VkSwapchainKHR swapChain, 
-//                       VkRenderPass renderPass,
-//                       std::vector<VkFramebuffer> swapChainFramebuffers, 
-//                       std::vector<VkImageView> &swapChainImageViews,
-//                       std::vector<VkImage> &swapChainImages, 
-//                       VkFormat &swapChainImageFormat, 
-//                       VkExtent2D &swapChainExtent) {
-
-//    // we could be minimized, in which case do nothing until we no longer are
-//    int width = 0, height = 0;
-//    window.getFramebufferSize(&width, &height);
-//    while (width == 0 || height == 0) {
-//        window.waitEvents();
-//        window.getFramebufferSize(&width, &height);// should these be flipped?
-//    }
-
-//    vkDeviceWaitIdle(device); // this is bad
-
-//    cleanupSwapChain(device, swapChain, swapChainFramebuffers, swapChainImageViews);
-
-//    createSwapChain(window, physicalDevice, device, surface, swapChainImages, swapChainImageFormat, swapChainExtent);
-//    createImageViews(device, swapChainImages, swapChainImageFormat);
-//    createFramebuffers(device, renderPass, swapChainExtent, swapChainImageViews);
-//}
-
-
-
+/*
+ * Function to cleanup a SwapChain
+ */
 void cleanupSwapChain(VkDevice device, VkSwapchainKHR swapChain, std::vector<VkFramebuffer> swapChainFramebuffers, std::vector<VkImageView> swapChainImageViews) {
     for (auto framebuffer : swapChainFramebuffers) {
         vkDestroyFramebuffer(device, framebuffer, nullptr);
@@ -1017,7 +1158,10 @@ void cleanupSwapChain(VkDevice device, VkSwapchainKHR swapChain, std::vector<VkF
     vkDestroySwapchainKHR(device, swapChain, nullptr);
 }
 
-// todo: hopefully replace most of this by RAII / vulkan.hpp
+/*
+ * Function to clean up the entire vulkan state. Outdated for now, and hopefully
+ * to be replaced with RAII implementations present in vulkan.hpp.
+ */
 void cleanup(VkInstance instance, 
              VkPhysicalDevice physicalDevice, 
              VkDevice device, 
@@ -1038,6 +1182,7 @@ void cleanup(VkInstance instance,
              VkDebugUtilsMessengerEXT debugMessenger,
              int framesInFlight) {
 
+// todo: hopefully replace most of this by RAII / vulkan.hpp
     for (size_t i = 0; i < framesInFlight; i++) {
         vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
         vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -1066,8 +1211,8 @@ void cleanup(VkInstance instance,
     vkDestroyDevice(device, nullptr);
     vkDestroySurfaceKHR(instance, surface, nullptr);
 
-    if (enableValidationLayers) {
-        DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+    if (VALIDATION_LAYERS_ENABLE) {
+        destroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
     }
     vkDestroyInstance(instance, nullptr);
 }
