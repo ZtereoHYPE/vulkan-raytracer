@@ -35,6 +35,11 @@ bool allValidationLayersSupported(std::vector<const char*> validationLayers);
 
 VkDebugUtilsMessengerEXT setupDebugMessenger(VkInstance instance);
 
+VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                             VkDebugUtilsMessageTypeFlagsEXT messageType,
+                                             const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                                             void* pUserData);
+
 VkPhysicalDevice pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface);
 
 int isDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface);

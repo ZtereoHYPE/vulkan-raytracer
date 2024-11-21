@@ -183,7 +183,6 @@ VkPhysicalDevice pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface) {
 
     int bestScore = 0;
     VkPhysicalDevice bestDevice = VK_NULL_HANDLE;
-    char bestName[256];
 
     for (const auto& device : devices) {
         if (!isDeviceSuitable(device, surface)) continue;
@@ -192,16 +191,18 @@ VkPhysicalDevice pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface) {
 
         if (score > bestScore) {
             bestDevice = device;
-
-            VkPhysicalDeviceProperties deviceProperties;
-            vkGetPhysicalDeviceProperties(device, &deviceProperties);
-            memcpy(bestName, deviceProperties.deviceName, 255);
         }
     }
 
     if (bestDevice == VK_NULL_HANDLE) {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
+
+    // get device name
+    char bestName[256];
+    VkPhysicalDeviceProperties deviceProperties;
+    vkGetPhysicalDeviceProperties(bestDevice, &deviceProperties);
+    memcpy(bestName, deviceProperties.deviceName, 255);
 
     printf("log: picked device %s\n", bestName);
 
@@ -295,7 +296,7 @@ int getDeviceScore(VkPhysicalDevice device, VkSurfaceKHR surface) {
 
     // devices whose queues are in the same family are better
     QueueFamilyIndices indices = findQueueFamilies(device, surface);
-    bool queuesInSameFamily = indices.areDifferent();
+    bool queuesInSameFamily = !indices.areDifferent();
 
     // if we need LLVMpipe then it gets the highest priority
     bool isLlvmpipe = !strcmp(deviceProperties.deviceName, "llvmpipe (LLVM 19.1.0, 256 bits)");
