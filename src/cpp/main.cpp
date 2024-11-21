@@ -12,7 +12,7 @@ class RayTracerProgram {
     }
 
    private:
-    Window window = Window("Vulkan", 800, 600);
+    Window window = Window("Vulkan RayTracer", 800, 600);
 
     VkDevice device;
     VkSwapchainKHR swapChain;
@@ -44,48 +44,11 @@ class RayTracerProgram {
         app->framebufferResized = true;
     }
 
-    VkBuffer createUniformBuffer(VkPhysicalDevice physicalDevice, VkDevice device, 
-                            VkDeviceMemory &uniformBufferMemory,
-                            void* &uniformBuffersMap) {
-
-        VkDeviceSize size = sizeof(UniformBufferObject);
-        VkBuffer uniformBuffer;
-        createBuffer(physicalDevice, device, size, 
-                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, 
-                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-                     uniformBuffer, 
-                     uniformBufferMemory);
-
-        vkMapMemory(device, uniformBufferMemory, 0, size, 0, &uniformBuffersMap);
-
-        return uniformBuffer;
-    }
-
-    VkBuffer createShaderBuffer(VkPhysicalDevice physicalDevice, VkDevice device, 
-                            VkDeviceMemory& shaderBufferMemory, 
-                            void*& shaderBufferMapped) {
-
-        VkBuffer shaderBuffer;
-        VkDeviceSize size = 2048; // 2 KB
-
-        createBuffer(physicalDevice, device, size, 
-                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, 
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                    shaderBuffer, 
-                    shaderBufferMemory);
-
-        vkMapMemory(device, shaderBufferMemory, 0, VK_WHOLE_SIZE, 0, &shaderBufferMapped);
-
-        memset(shaderBufferMapped, 0, size);
-
-        return shaderBuffer;
-    }
-
     void initVulkan() {
         VkInstance instance = createInstance();
         VkDebugUtilsMessengerEXT debugMsgr = setupDebugMessenger(instance);
 
-        VkSurfaceKHR surface = createVulkanWindowSurface(&window, instance);
+        VkSurfaceKHR surface = window.createVulkanSurface(instance);
 
         VkPhysicalDevice physicalDevice = pickPhysicalDevice(instance, surface);
 
@@ -101,10 +64,10 @@ class RayTracerProgram {
                                     physicalDevice, 
                                     device, 
                                     surface, 
+                                    queueFamilies,
                                     swapChainImages, 
                                     swapChainImageFormat, 
-                                    swapChainExtent,
-                                    queueFamilies);
+                                    swapChainExtent);
 
         std::vector<VkImageView> swapChainImageViews = createSwapchainViews(device, swapChainImages, swapChainImageFormat);
 
@@ -112,24 +75,23 @@ class RayTracerProgram {
 
         computePipeline = createComputePipeline(device, computeDescriptorSetLayout, computePipelineLayout);
 
-        VkCommandPool commandPool = createCommandPool(device, physicalDevice, queueFamilies);
-
         VkDeviceMemory uniformMemory;
-        VkBuffer uniformBuffer = createUniformBuffer(physicalDevice, device, uniformMemory, uniformMemoryMap);
+        VkBuffer uniformBuffer = createUniformBuffer(physicalDevice, device, sizeof(UniformBufferObject), uniformMemory, uniformMemoryMap);
 
         VkDeviceMemory computeSSBOMemory;
-        VkBuffer computeSSBO = createShaderBuffer(physicalDevice, device, computeSSBOMemory, computeSSBOMemoryMap);
+        VkBuffer computeSSBO = createShaderBuffer(physicalDevice, device, 2048, computeSSBOMemory, computeSSBOMemoryMap);
 
         VkImageView accumulatorView;
         VkDeviceMemory accumulatorMemory;
         VkImage accumulatorImage = createImage(physicalDevice, device, swapChainExtent, VK_FORMAT_R8G8B8A8_UNORM, accumulatorView, accumulatorMemory);
 
-        transitionImageLayout(device, commandPool, computeQueue, accumulatorImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+        VkCommandPool computeCommandPool = createCommandPool(device, physicalDevice, queueFamilies.computeFamily.value());
+        transitionImageLayout(device, computeCommandPool, computeQueue, accumulatorImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
         VkDescriptorPool descriptorPool = createDescriptorPool(device, swapChainImageViews.size());
         VkSampler sampler = createSampler(device);
 
-        computeCommandBuffer = createCommandBuffer(device, commandPool);
+        computeCommandBuffer = createCommandBuffer(device, computeCommandPool);
 
         // store in closure to be able to redefine later
         createDescriptorSets = [computeDescriptorSetLayout, descriptorPool, uniformBuffer, computeSSBO, accumulatorView, swapChainImageViews, sampler]
