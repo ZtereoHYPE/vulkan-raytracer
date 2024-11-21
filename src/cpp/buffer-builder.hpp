@@ -2,8 +2,6 @@
 
 #include "pch.hpp"
 
-// todo: find a more elegant way to structure a buffer builder with known structs
-//  but for now this will do
 class BufferBuilder {
    private:
     void *tmpBuffer;
@@ -17,21 +15,33 @@ class BufferBuilder {
     
     BufferBuilder(const BufferBuilder &obj) = delete; // do not allow copies of this class
 
+    /*
+     * Generic function that appends data to the buffer.
+     * The stride is computed from the size of the appended object.
+     */
     template<typename T>
     void append(T value) {
         while (currentSize <= currentOffset + sizeof(T))
             growTmpBuffer();
 
+        // this is a GCC-ism.
         memcpy(tmpBuffer + currentOffset, &value, sizeof(T));
         currentOffset += sizeof(T);
     };
     
+    /*
+     * Overload of the append() function where the stride is explicitly
+     * given. 
+     * 
+     * Useful when writing unpadded data that requires some form
+     * of memory padding.
+     */
     template<typename T>
     void append(T value, size_t size) {
         while (currentSize <= currentOffset + size)
             growTmpBuffer();
 
-        // this is a GCC-ism
+        // this is a GCC-ism.
         memcpy(tmpBuffer + currentOffset, &value, sizeof(T));
         currentOffset += size;
     };
@@ -40,6 +50,13 @@ class BufferBuilder {
 
     void pad(size_t amt);
 
+    /*
+     * Gets the offset of a given memory location relative to a specific
+     * type.
+     * 
+     * For example, if the index of an integer in an array of integers is needed,
+     * it can be obtained by calling getRelativeOffset<int>() on the buffer builder.
+     */
     template<typename Type>
     size_t getRelativeOffset() {
         if (currentOffset == 0)

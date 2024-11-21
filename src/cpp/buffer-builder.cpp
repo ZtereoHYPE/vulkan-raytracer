@@ -14,14 +14,23 @@ BufferBuilder::BufferBuilder() {
     currentOffset = 0;
 }
 
+/*
+ * Gets the current offset within the buffer in bytes.
+ */
 size_t BufferBuilder::getOffset() {
     return currentOffset;
 }
 
+/*
+ * Pads the given amount with zeros.
+ */
 void BufferBuilder::pad(size_t amt) {
     currentOffset += amt;
 }
 
+/*
+ * Writes the built buffer to a location in memory.
+ */
 void BufferBuilder::write(void *memory) {
     memcpy(memory, tmpBuffer, currentOffset);
 }
