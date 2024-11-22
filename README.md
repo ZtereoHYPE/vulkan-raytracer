@@ -29,7 +29,7 @@ These showcase the depth of field as well as various materials such as glass.
 This ray tracer uses GLFW to create the window and retrieve the vulkan surface.
 As it stands, the project depends on the C++ libraries `libglfw3` and `vulkan`.
 
-On Fedora, GLFW was built from source to work properly on Wayland as version 3.4 is not released yet in many package managers.
+On Fedora, GLFW was built from source to work properly on Wayland as version 3.4 is not released yet in the repositories. However, depending on your distribution simply installing GLFW from the package manager might work.
 
 #### Vulkan SDK
 A simple way of obtaining all the required vulkan libraries is installing the lunarg Vulkan SDK: https://www.lunarg.com/vulkan-sdk/
