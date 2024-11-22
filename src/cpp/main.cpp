@@ -34,7 +34,7 @@ class RayTracerProgram {
 
     // performance measure
     uint32_t frameCounter = 0;
-    std::chrono::_V2::system_clock::time_point lastFrame = std::chrono::high_resolution_clock::now();
+    std::chrono::_V2::system_clock::time_point lastFrame;
     float avgFps = 120;
 
     std::function<std::vector<VkDescriptorSet>(VkDevice,uint)> createDescriptorSets;
@@ -74,7 +74,7 @@ class RayTracerProgram {
         VkBuffer uniformBuffer = createUniformBuffer(physicalDevice, device, sizeof(UniformBufferObject), uniformMemory, uniformMemoryMap);
 
         VkDeviceMemory computeSSBOMemory;
-        VkBuffer computeSSBO = createShaderBuffer(physicalDevice, device, 2048, computeSSBOMemory, computeSSBOMemoryMap);
+        VkBuffer computeSSBO = createShaderBuffer(physicalDevice, device, 4096, computeSSBOMemory, computeSSBOMemoryMap);
 
         VkImageView accumulatorView;
         VkDeviceMemory accumulatorMemory;
@@ -308,10 +308,30 @@ class RayTracerProgram {
     }
 
     void pushWorldData(void* shaderBufferMemoryMap) {
+        int cube_tris[] = {
+            0,0,0, 1,1,0, 1,0,0,
+            0,0,0, 0,1,0, 1,1,0,
+
+            1,0,0, 1,1,1, 1,0,1,
+            1,0,0, 1,1,0, 1,1,1,
+
+            1,0,1, 0,1,1, 1,1,1,
+            1,0,1, 0,0,1, 0,1,1,
+
+            0,0,1, 0,1,0, 0,0,0,
+            0,0,1, 0,1,1, 0,1,0,
+
+            0,1,0, 1,1,1, 1,1,0,
+            0,1,0, 0,1,1, 1,1,1,
+
+            0,0,0, 1,0,1, 1,0,0,
+            0,0,0, 0,0,1, 1,0,1,
+        };
+
         BufferBuilder infoBuffer = BufferBuilder {};
         BufferBuilder triangleBuffer = BufferBuilder {};
 
-        infoBuffer.append(3); // mesh_count
+        infoBuffer.append(4); // mesh_count
         infoBuffer.pad(12); // alignment rules
 
         // Mesh 1: Ground sphere
@@ -354,10 +374,35 @@ class RayTracerProgram {
 
         // Mesh 3: Test cube
         infoBuffer.append<Mesh>({
-            .triangle_count = 10,
+            .triangle_count = 12,
             .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
             .material = {
                 .baseColor = glm::vec4(0.7, 0.1, 0.1, 1),
+                .emissiveStrength = glm::vec4(0),
+                .reflectivity = 0,
+                .roughness = 0,
+                .isGlass = true,
+                .ior = 1.4,
+                .shadeSmooth = false,
+            }
+        });
+
+        for (int triangle = 0; triangle < 12; triangle++) {
+            triangleBuffer.append<Triangle>({
+                .vertices = {
+                    glm::vec4(-1.0 + cube_tris[triangle * 9 + 0] * 2, -1.0 + cube_tris[triangle * 9 + 1] * 2, 3.0 + cube_tris[triangle * 9 + 2] * 2, 0),
+                    glm::vec4(-1.0 + cube_tris[triangle * 9 + 3] * 2, -1.0 + cube_tris[triangle * 9 + 4] * 2, 3.0 + cube_tris[triangle * 9 + 5] * 2, 0),
+                    glm::vec4(-1.0 + cube_tris[triangle * 9 + 6] * 2, -1.0 + cube_tris[triangle * 9 + 7] * 2, 3.0 + cube_tris[triangle * 9 + 8] * 2, 0),
+                }
+            });
+        }
+
+        // Mesh 4: Test cube 2
+        infoBuffer.append<Mesh>({
+            .triangle_count = 12,
+            .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
+            .material = {
+                .baseColor = glm::vec4(0.2, 0.3, 0.8, 1),
                 .emissiveStrength = glm::vec4(0),
                 .reflectivity = 0,
                 .roughness = 0,
@@ -367,32 +412,12 @@ class RayTracerProgram {
             }
         });
 
-        int triangles[] = {
-            //0,0,0, 1,1,0, 1,0,0,
-            //0,0,0, 0,1,0, 1,1,0,
-
-            1,0,0, 1,1,1, 1,0,1,
-            1,0,0, 1,1,0, 1,1,1,
-
-            1,0,1, 0,1,1, 1,1,1,
-            1,0,1, 0,0,1, 0,1,1,
-
-            0,0,1, 0,1,0, 0,0,0,
-            0,0,1, 0,1,1, 0,1,0,
-
-            0,1,0, 1,1,1, 1,1,0,
-            0,1,0, 0,1,1, 1,1,1,
-
-            0,0,0, 1,0,1, 1,0,0,
-            0,0,0, 0,0,1, 1,0,1,
-        };
-
-        for (int triangle = 0; triangle < 10; triangle++) {
+        for (int triangle = 0; triangle < 12; triangle++) {
             triangleBuffer.append<Triangle>({
                 .vertices = {
-                    glm::vec4(-1.0 + triangles[triangle * 9 + 0] * 2, -1.0 + triangles[triangle * 9 + 1] * 2, 3.0 + triangles[triangle * 9 + 2] * 2, 0),
-                    glm::vec4(-1.0 + triangles[triangle * 9 + 3] * 2, -1.0 + triangles[triangle * 9 + 4] * 2, 3.0 + triangles[triangle * 9 + 5] * 2, 0),
-                    glm::vec4(-1.0 + triangles[triangle * 9 + 6] * 2, -1.0 + triangles[triangle * 9 + 7] * 2, 3.0 + triangles[triangle * 9 + 8] * 2, 0),
+                    glm::vec4(1.0 + cube_tris[triangle * 9 + 0] / 2.0, -1.0 + cube_tris[triangle * 9 + 1] / 2.0, 2.0 + cube_tris[triangle * 9 + 2] / 2.0, 0),
+                    glm::vec4(1.0 + cube_tris[triangle * 9 + 3] / 2.0, -1.0 + cube_tris[triangle * 9 + 4] / 2.0, 2.0 + cube_tris[triangle * 9 + 5] / 2.0, 0),
+                    glm::vec4(1.0 + cube_tris[triangle * 9 + 6] / 2.0, -1.0 + cube_tris[triangle * 9 + 7] / 2.0, 2.0 + cube_tris[triangle * 9 + 8] / 2.0, 0),
                 }
             });
         }
@@ -403,6 +428,8 @@ class RayTracerProgram {
         // write to the gpu memory
         infoBuffer.write(shaderBufferMemoryMap);
         triangleBuffer.write(shaderBufferMemoryMap + infoBuffer.getOffset());
+
+        printf("total memory: %d\n", infoBuffer.getOffset() + triangleBuffer.getOffset());
 
         /* Debug code 
          *  printf("Pushed mem layout: \n");
