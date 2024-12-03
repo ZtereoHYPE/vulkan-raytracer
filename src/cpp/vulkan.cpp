@@ -9,7 +9,7 @@ const bool USE_LLVMPIPE = false;
 const bool VALIDATION_LAYERS_ENABLE = true;
 
 // add "VK_LAYER_LUNARG_api_dump" to dump Vulkan calls in stdout
-const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};
+const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};  // "VK_LAYER_PRINTF_ONLY_PRESET"
 const std::vector<const char*> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 /* 

@@ -6,6 +6,7 @@
 
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_debug_printf : enable
 
 #include "imports/ray.comp"
 #include "imports/random.comp"
@@ -13,7 +14,7 @@
 /* Material of a Mesh.
  *
  * base_color           is the base color of the mesh;
- * emissive_strength    is strenght of the emitted light by the object per channel;
+ * emission             is strenght of the emitted light by the object per channel;
  * reflectivity         describes how reflective the object is (blends between lambertian and metallic);
  * roughness            describes how rough the reflective surface is;
  * is_glass             indicates whether the material will be rendered with a glass shader;
@@ -22,22 +23,21 @@
  */
 struct Material {
     vec4 base_color;
-    vec4 emissive_strength;
+    vec4 emission;
     float reflectivity;
     float roughness;
-    bool is_glass;
     float ior;
+    bool is_glass;
     bool shaded_smooth;
 };
 
 /* Description of a Mesh.
  *
- * If is_sphere == True:
- *   sphere_radius      is the radius of the sphere;
- *   triangle_count     is undefined;
- *   offset             points to the triangle whose first vec3 is the center of the sphere;
+ * If it's a sphere:
+ *   triangle_count     is 0;
+ *   offset             points to the triangle whose first vec3 is the center of
+ *                      the sphere, and second.x is the center;
  * Else
- *   sphere_radius      is undefined;
  *   triangle_count     is the amount of triangles in the mesh;
  *   offset             is the offset of those triangles in the triangle buffer;
  * 
@@ -378,7 +378,7 @@ vec3 ray_color(Ray ray) {
 
         if (hit.did_hit) {
             Material material = hit.material;
-            incoming_light += ray_color * hit.material.emissive_strength.xyz;
+            incoming_light += ray_color * hit.material.emission.xyz;
 
             if (material.is_glass) {
                 glass_shader(ray, hit);
