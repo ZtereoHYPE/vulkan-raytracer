@@ -11,7 +11,8 @@ class RayTracerProgram {
     }
 
    private:
-    Window window = Window("Vulkan RayTracer", 800, 600);
+    Scene scene{};
+    Window window{ "Vulkan RayTracer", 800, 600 };
 
     VkDevice device;
     VkSwapchainKHR swapChain;
@@ -26,8 +27,8 @@ class RayTracerProgram {
     VkCommandBuffer computeCommandBuffer;
 
     VkFence computeInFlightFence;
-    VkSemaphore imageAvailableSemaphore;
-    VkSemaphore computeFinishedSemaphore;
+    VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
+    VkSemaphore computeFinishedSemaphore = VK_NULL_HANDLE;
 
     void* uniformMemoryMap;
     void* computeSSBOMemoryMap;
@@ -35,9 +36,6 @@ class RayTracerProgram {
     // performance measure
     uint32_t frameCounter = 0;
     std::chrono::_V2::system_clock::time_point lastFrame;
-    float avgFps = 120;
-
-    std::function<std::vector<VkDescriptorSet>(VkDevice,uint)> createDescriptorSets;
 
     void initVulkan() {
         VkInstance instance = createInstance();
@@ -73,8 +71,10 @@ class RayTracerProgram {
         VkDeviceMemory uniformMemory;
         VkBuffer uniformBuffer = createUniformBuffer(physicalDevice, device, sizeof(UniformBufferObject), uniformMemory, uniformMemoryMap);
 
+        std::pair<size_t, size_t> sceneSizes = scene.getBufferSizes();
+
         VkDeviceMemory computeSSBOMemory;
-        VkBuffer computeSSBO = createShaderBuffer(physicalDevice, device, 4096, computeSSBOMemory, computeSSBOMemoryMap);
+        VkBuffer computeSSBO = createShaderBuffer(physicalDevice, device, sceneSizes.first + sceneSizes.second, computeSSBOMemory, computeSSBOMemoryMap);
 
         VkImageView accumulatorView;
         VkDeviceMemory accumulatorMemory;
@@ -88,10 +88,16 @@ class RayTracerProgram {
 
         computeCommandBuffer = createCommandBuffer(device, computeCommandPool);
 
-        // store in closure to be able to redefine later
-        createDescriptorSets = [computeDescriptorSetLayout, descriptorPool, uniformBuffer, computeSSBO, accumulatorView, swapChainImageViews, sampler]
-                               (VkDevice device, uint offset) 
-                               {return createComputeDescriptorSets(device, computeDescriptorSetLayout, descriptorPool, uniformBuffer, computeSSBO, offset, accumulatorView, swapChainImageViews, sampler);};
+        computeDescriptorSets = createComputeDescriptorSets(device, 
+                                                            computeDescriptorSetLayout, 
+                                                            descriptorPool, 
+                                                            uniformBuffer, 
+                                                            computeSSBO, 
+                                                            sceneSizes.first, 
+                                                            accumulatorView, 
+                                                            swapChainImageViews, 
+                                                            sampler);
+
 
         createSyncObjects();
 
@@ -110,18 +116,13 @@ class RayTracerProgram {
         vkDeviceWaitIdle(device);
     }
     
-    
     void drawFrame() {
         // Frame time calculations
         auto currentTime = std::chrono::high_resolution_clock::now();
         auto duration = duration_cast<std::chrono::milliseconds>(currentTime - lastFrame);
 
         auto fps = 1000.0 / duration.count();
-        // do not take into account spurious frames
-        if (fps < avgFps + 100) 
-            avgFps = (avgFps * (frameCounter) + fps) / (frameCounter + 1);
-
-        std::cout << "FPS/avg: " << fps << '/' << avgFps << std::endl;
+        std::cout << "FPS: " << fps << std::endl;
         lastFrame = currentTime;
 
         /* COMPUTE SUBMISSION */
@@ -308,142 +309,27 @@ class RayTracerProgram {
     }
 
     void pushWorldData(void* shaderBufferMemoryMap) {
-        int cube_tris[] = {
-            0,0,0, 1,1,0, 1,0,0,
-            0,0,0, 0,1,0, 1,1,0,
-
-            1,0,0, 1,1,1, 1,0,1,
-            1,0,0, 1,1,0, 1,1,1,
-
-            1,0,1, 0,1,1, 1,1,1,
-            1,0,1, 0,0,1, 0,1,1,
-
-            0,0,1, 0,1,0, 0,0,0,
-            0,0,1, 0,1,1, 0,1,0,
-
-            0,1,0, 1,1,1, 1,1,0,
-            0,1,0, 0,1,1, 1,1,1,
-
-            0,0,0, 1,0,1, 1,0,0,
-            0,0,0, 0,0,1, 1,0,1,
-        };
-
         BufferBuilder infoBuffer = BufferBuilder {};
         BufferBuilder triangleBuffer = BufferBuilder {};
 
-        infoBuffer.append(4); // mesh_count
-        infoBuffer.pad(12); // alignment rules
-
-        // Mesh 1: Ground sphere
-        infoBuffer.append((Mesh) {
-            .triangle_count = 0, // sphere
-            .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
-            .material = {
-                .baseColor = glm::vec4(0.7, 0.7, 0.7, 1),
-                .emissiveStrength = glm::vec4(0),
-                .reflectivity = 0,
-                .roughness = 0,
-                .isGlass = 0,
-                .ior = 0,
-                .shadeSmooth = 0,
-            },
-        });
-        // radius is first component of second vec3 of triangle
-        triangleBuffer.append<Sphere>({
-            .center = glm::vec3(0.0, -100.0, 5.0),
-            .radius = 99.0
-        }, sizeof(Triangle));
-        
-        // Mesh 2: Sun sphere
-        infoBuffer.append((Mesh) {
-            .triangle_count = 0, // sphere
-            .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
-            .material = {
-                .emissiveStrength = glm::vec4(15.0, 15.0, 15.0, 1),
-                .reflectivity = 0,
-                .roughness = 0,
-                .isGlass = false,
-                .ior = 0,
-                .shadeSmooth = false,
-            }
-        });
-        triangleBuffer.append<Sphere>({
-            .center = glm::vec3(-500.0, 200.0, 700.0),
-            .radius = 200.0
-        }, sizeof(Triangle));
-
-        // Mesh 3: Test cube
-        infoBuffer.append<Mesh>({
-            .triangle_count = 12,
-            .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
-            .material = {
-                .baseColor = glm::vec4(0.7, 0.1, 0.1, 1),
-                .emissiveStrength = glm::vec4(0),
-                .reflectivity = 0,
-                .roughness = 0,
-                .isGlass = true,
-                .ior = 1.4,
-                .shadeSmooth = false,
-            }
-        });
-
-        for (int triangle = 0; triangle < 12; triangle++) {
-            triangleBuffer.append<Triangle>({
-                .vertices = {
-                    glm::vec4(-1.0 + cube_tris[triangle * 9 + 0] * 2, -1.0 + cube_tris[triangle * 9 + 1] * 2, 3.0 + cube_tris[triangle * 9 + 2] * 2, 0),
-                    glm::vec4(-1.0 + cube_tris[triangle * 9 + 3] * 2, -1.0 + cube_tris[triangle * 9 + 4] * 2, 3.0 + cube_tris[triangle * 9 + 5] * 2, 0),
-                    glm::vec4(-1.0 + cube_tris[triangle * 9 + 6] * 2, -1.0 + cube_tris[triangle * 9 + 7] * 2, 3.0 + cube_tris[triangle * 9 + 8] * 2, 0),
-                }
-            });
-        }
-
-        // Mesh 4: Test cube 2
-        infoBuffer.append<Mesh>({
-            .triangle_count = 12,
-            .offset = (uint) triangleBuffer.getRelativeOffset<Triangle>(),
-            .material = {
-                .baseColor = glm::vec4(0.2, 0.3, 0.8, 1),
-                .emissiveStrength = glm::vec4(0),
-                .reflectivity = 0,
-                .roughness = 0,
-                .isGlass = false,
-                .ior = 1.4,
-                .shadeSmooth = false,
-            }
-        });
-
-        for (int triangle = 0; triangle < 12; triangle++) {
-            triangleBuffer.append<Triangle>({
-                .vertices = {
-                    glm::vec4(1.0 + cube_tris[triangle * 9 + 0] / 2.0, -1.0 + cube_tris[triangle * 9 + 1] / 2.0, 2.0 + cube_tris[triangle * 9 + 2] / 2.0, 0),
-                    glm::vec4(1.0 + cube_tris[triangle * 9 + 3] / 2.0, -1.0 + cube_tris[triangle * 9 + 4] / 2.0, 2.0 + cube_tris[triangle * 9 + 5] / 2.0, 0),
-                    glm::vec4(1.0 + cube_tris[triangle * 9 + 6] / 2.0, -1.0 + cube_tris[triangle * 9 + 7] / 2.0, 2.0 + cube_tris[triangle * 9 + 8] / 2.0, 0),
-                }
-            });
-        }
-
-        // create descriptor sets given known offset within the buffer
-        computeDescriptorSets = this->createDescriptorSets(device, infoBuffer.getOffset());
+        scene.populateBuffers(infoBuffer, triangleBuffer);
 
         // write to the gpu memory
         infoBuffer.write(shaderBufferMemoryMap);
         triangleBuffer.write(shaderBufferMemoryMap + infoBuffer.getOffset());
-
-        printf("total memory: %d\n", infoBuffer.getOffset() + triangleBuffer.getOffset());
-
-        /* Debug code 
-         *  printf("Pushed mem layout: \n");
-         *  printf(":----------infoBuffer---------: \n");
-         *  for (int i = 0; i < (infoBuffer.getOffset() + triangleBuffer.getOffset()) / 4; i++) {
-         *      if ((i * 4 == infoBuffer.getOffset()))
-         *          printf(":----------dataBuffer---------: \n");
-         *          
-         *      printf("%d /", ((int *)shaderBufferMemoryMap)[i]);
-         *      printf(" %.2f ", ((float *)shaderBufferMemoryMap)[i]);
-         *      printf("\n");
-         *  }
-         *  printf(":----------------------------: \n");
-         */
+        // Debug code 
+        printf("Pushed mem layout: \n");
+        printf(":----------infoBuffer---------: \n");
+        for (int i = 0; i < (infoBuffer.getOffset() + triangleBuffer.getOffset()) / 4; i++) {
+            if ((i * 4 == infoBuffer.getOffset()))
+                printf(":----------dataBuffer---------: \n");
+                
+            printf("%d /", ((int *)shaderBufferMemoryMap)[i]);
+            printf(" %.2f ", ((float *)shaderBufferMemoryMap)[i]);
+            printf("\n");
+        }
+        printf(":----------------------------: \n");
+    
     }
 
     void createSyncObjects() {
