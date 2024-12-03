@@ -69,8 +69,6 @@ VkExtent2D chooseSwapExtent(VkPhysicalDevice physicalDevice, VkSurfaceKHR surfac
 
 std::vector<VkImageView> createSwapchainViews(VkDevice device, std::vector<VkImage> swapChainImages, VkFormat swapChainImageFormat);
 
-VkRenderPass createRenderPass(VkDevice device, VkFormat swapChainImageFormat);
-
 VkDescriptorSetLayout createComputeDescriptorSetLayout(VkDevice device);
 
 VkPipeline createComputePipeline(VkDevice device,
@@ -99,8 +97,6 @@ VkBuffer createBuffer(VkPhysicalDevice physicalDevice,
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t suitableMemoryTypes, VkMemoryPropertyFlags properties);
 
 VkCommandPool createCommandPool(VkDevice device, VkPhysicalDevice physicalDevice, u_int32_t queueFamilyIndex);
-
-std::vector<VkFramebuffer> createFramebuffers(VkDevice device, VkRenderPass renderPass, VkExtent2D swapChainExtent, std::vector<VkImageView> swapChainImageViews);
 
 VkCommandBuffer createCommandBuffer(VkDevice device, VkCommandPool commandPool);
 
