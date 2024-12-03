@@ -1,0 +1,9 @@
+[package]
+name = "obj-convert"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0.215", features = ["derive"]}
+serde_yaml = "0.9.34"
+tobj = "4.0.2"
