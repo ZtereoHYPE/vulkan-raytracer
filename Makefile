@@ -2,7 +2,7 @@
 CXX := g++
 CXXFLAGS := -std=c++20 -g -Wno-pointer-arith
 #CXXFLAGS := -std=c++20 -O2 -flto
-LDFLAGS := -lglfw3 -lvulkan -ldl
+LDFLAGS := -lglfw3 -lvulkan -ldl -lyaml-cpp
 SHADER_COMPILER := glslc
 
 # Directories
