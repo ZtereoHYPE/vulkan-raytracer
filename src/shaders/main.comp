@@ -1,7 +1,7 @@
 #version 460
 
-#define SAMPLES 32
-#define BOUNCES 8
+#define SAMPLES 16
+#define BOUNCES 32
 #define EPSILON 0.0001
 
 #extension GL_GOOGLE_include_directive : enable
@@ -151,13 +151,14 @@ void glass_shader(inout Ray ray, HitRecord hit) {
     // Check if we're entering or exiting the glass
     float ior_ratio;
     if (dot(normal, dir) > 0) {
-        ior_ratio = hit.material.ior / 1.0;
+        ior_ratio = hit.material.ior;
+        normal = -normal;
     } else {
         ior_ratio = 1.0 / hit.material.ior;
     }
 
     float cos_angle = min(dot(-dir, normal), 1.0);
-    float sin_angle = sqrt(1 - cos_angle * cos_angle); // todo: faster sin algos?
+    float sin_angle = sqrt(1 - cos_angle * cos_angle); // todo: faster sin algos? len(cross) / len(a)*len(b)?
 
     bool total_reflection = ior_ratio * sin_angle > 1;
     bool schlick_reflection = pgc_random(seed) < schlick_reflectance(cos_angle, ior_ratio);
