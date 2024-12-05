@@ -11,8 +11,8 @@ class RayTracerProgram {
     }
 
    private:
-    Scene scene{};
-    Window window{ "Vulkan RayTracer", 800, 600 };
+    Scene scene{ "cornell.yaml" };
+    Window window{ "Vulkan RayTracer", 600, 600 };
 
     VkDevice device;
     VkSwapchainKHR swapChain;
@@ -73,6 +73,8 @@ class RayTracerProgram {
 
         std::pair<size_t, size_t> sceneSizes = scene.getBufferSizes();
 
+        printf("log: Total scene size: %d\n", sceneSizes.first + sceneSizes.second);
+
         VkDeviceMemory computeSSBOMemory;
         VkBuffer computeSSBO = createShaderBuffer(physicalDevice, device, sceneSizes.first + sceneSizes.second, computeSSBOMemory, computeSSBOMemoryMap);
 
@@ -129,19 +131,14 @@ class RayTracerProgram {
 
         // No need to fence on the presentation as we only start computing when the next swapchain image is available
         // We do need to fence on compute because we'll get a new image while the previous is still computing!
-        // todo: get rid of this by limiting cpu render-ahead
         vkWaitForFences(device, 1, &computeInFlightFence, VK_TRUE, INT_MAX);
 
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 
-        // If the swapchain is completely out of date, drop the frame.
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-            //recreateSwapChain();
-            return;
-
         // Suboptimal swapchain images are still considered good as they can still be presented
-        } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        // If the swapchain is completely out of date, throw an error as it shouldn't happen.
+        if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
             throw std::runtime_error("failed to acquire swap chain image!");
         }
         
@@ -164,7 +161,7 @@ class RayTracerProgram {
         submitInfo.pCommandBuffers = &computeCommandBuffer;
 
         submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &computeFinishedSemaphore; // to signal when compute commands are done
+        submitInfo.pSignalSemaphores = &computeFinishedSemaphore; // to signal when compute commands are done executing
 
         // signal computeInFlightFence when the command buffer can be reused
         if (vkQueueSubmit(computeQueue, 1, &submitInfo, computeInFlightFence) != VK_SUCCESS) {
@@ -221,12 +218,12 @@ class RayTracerProgram {
         computeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         computeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
-        computeBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        computeBarrier.dstAccessMask = VK_ACCESS_NONE; // todo: not sure if good
+        computeBarrier.srcAccessMask = VK_ACCESS_NONE; // https://themaister.net/blog/2019/08/14/yet-another-blog-explaining-vulkan-synchronization/
+        computeBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT; // todo: not sure if necessary
 
         vkCmdPipelineBarrier(
             computeCommandBuffer,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, // from the start until compute
             0,
             0, nullptr,
             0, nullptr,
@@ -255,12 +252,12 @@ class RayTracerProgram {
         presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
-        presentBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        presentBarrier.dstAccessMask = VK_ACCESS_NONE; // todo: not sure if good
+        presentBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT; // because the shader just wrote to it, caches must be flushed
+        presentBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT; // covers all read scenarios, unsure if required
 
         vkCmdPipelineBarrier(
             computeCommandBuffer,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, // from compute until the end
             0,
             0, nullptr,
             0, nullptr,
@@ -279,8 +276,8 @@ class RayTracerProgram {
 
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        //auto origin = glm::vec4(std::sin(time)*3, 0, 0, 0);
-        auto origin = glm::vec4(0, 0, 0, 0);
+        auto origin = glm::vec4(0, 1, 3, 0);
+        //auto origin = glm::vec4(-0.45206, 0.322176, 0.2, 0);
 
         float ratio = swapChainExtent.width / (float) swapChainExtent.height;
         float u, v;
@@ -296,12 +293,12 @@ class RayTracerProgram {
         UniformBufferObject ubo {
             .resolution = glm::vec2(swapChainExtent.width, swapChainExtent.height),
             .viewportUv = glm::vec2(u, v),
-            .focalLength = 0.6,
+            .focalLength = 1.0,
             .focusDistance = 4.8,
             .apertureRadius = 0.0,
             .time = frameCounter,
             .origin = origin,
-            .rotation = glm::lookAt(glm::vec3(origin), glm::vec3(0, 0, -3.5), glm::vec3(0, 1, 0)),
+            .rotation = glm::rotate(glm::identity<glm::mat4>(), 3.14f, glm::vec3(0, 1, 0)), // glm::identity<glm::mat4>(),
         };
 
         // not super efficient, kinda like staging buffers we need push constants or whatever
@@ -317,19 +314,6 @@ class RayTracerProgram {
         // write to the gpu memory
         infoBuffer.write(shaderBufferMemoryMap);
         triangleBuffer.write(shaderBufferMemoryMap + infoBuffer.getOffset());
-        // Debug code 
-        printf("Pushed mem layout: \n");
-        printf(":----------infoBuffer---------: \n");
-        for (int i = 0; i < (infoBuffer.getOffset() + triangleBuffer.getOffset()) / 4; i++) {
-            if ((i * 4 == infoBuffer.getOffset()))
-                printf(":----------dataBuffer---------: \n");
-                
-            printf("%d /", ((int *)shaderBufferMemoryMap)[i]);
-            printf(" %.2f ", ((float *)shaderBufferMemoryMap)[i]);
-            printf("\n");
-        }
-        printf(":----------------------------: \n");
-    
     }
 
     void createSyncObjects() {
