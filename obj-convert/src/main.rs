@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         scene: Box::new(meshes),
     };
 
-    let file: File = File::create("out.yaml")?;
+    let file: File = File::create("scene.yaml")?;
     serde_yaml::to_writer(file, &scene)?;
 
     Ok(())
@@ -83,9 +83,9 @@ fn load_obj() -> (Vec<Model>, Vec<Material>) {
         .expect("Please input the obj filepath");
 
     let (models, materials) =
-        tobj::load_obj(&obj_file, &tobj::LoadOptions::default()).expect("Failed to obj");
+        tobj::load_obj(&obj_file, &tobj::LoadOptions::default()).expect("OBJ file not found");
 
-    let materials = materials.expect("materials file not found");
+    let materials = materials.expect("MTL file not found");
 
     return (models, materials);
 }

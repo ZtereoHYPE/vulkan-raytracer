@@ -9,7 +9,8 @@ const bool USE_LLVMPIPE = false;
 const bool VALIDATION_LAYERS_ENABLE = true;
 
 // add "VK_LAYER_LUNARG_api_dump" to dump Vulkan calls in stdout
-const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};  // "VK_LAYER_PRINTF_ONLY_PRESET"
+// add "VK_LAYER_PRINTF_ONLY_PRESET" to allow printf in shaders for renderdoc
+const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};
 const std::vector<const char*> deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 /* 
@@ -157,7 +158,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
                                              const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
                                              void* pUserData) {
     if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-        std::cerr << "validation layer: " << std::endl << pCallbackData->pMessage << std::endl;
+        std::cerr << std::endl << pCallbackData->pMessage << std::endl;
     }
 
     return VK_FALSE;

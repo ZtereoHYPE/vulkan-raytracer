@@ -11,7 +11,7 @@ class RayTracerProgram {
     }
 
    private:
-    Scene scene{ "cornell.yaml" };
+    Scene scene{ "scenes/scene.yaml" };
     Window window{ "Vulkan RayTracer", 600, 600 };
 
     VkDevice device;

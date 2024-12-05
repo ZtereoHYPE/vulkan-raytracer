@@ -75,6 +75,7 @@ void Scene::validateFile() {
 
             assertTrue(vertices.size() == normals.size());
             assertTrue(vertices.size() % 9 == 0);
+            assertTrue(vertices.size() != 0);
 
         } else if (mesh["type"].as<str>() == "Sphere") {
             assertTrue(mesh["data"]["center"].IsSequence());
