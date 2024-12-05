@@ -131,7 +131,7 @@ class RayTracerProgram {
 
         // No need to fence on the presentation as we only start computing when the next swapchain image is available
         // We do need to fence on compute because we'll get a new image while the previous is still computing!
-        vkWaitForFences(device, 1, &computeInFlightFence, VK_TRUE, INT_MAX);
+        vkWaitForFences(device, 1, &computeInFlightFence, VK_TRUE, UINT64_MAX);
 
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
@@ -201,6 +201,8 @@ class RayTracerProgram {
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+
         // Transition the layout of the image to one compute shaders can output to (VK_IMAGE_LAYOUT_GENERAL)
         // todo: this ideally happens before waiting for the fence, or the fence shouldn't exist at all
         VkImageMemoryBarrier computeBarrier {};
@@ -218,11 +220,12 @@ class RayTracerProgram {
         computeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         computeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
-        computeBarrier.srcAccessMask = VK_ACCESS_NONE; // https://themaister.net/blog/2019/08/14/yet-another-blog-explaining-vulkan-synchronization/
-        computeBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT; // todo: not sure if necessary
+        // https://themaister.net/blog/2019/08/14/yet-another-blog-explaining-vulkan-synchronization/
+        computeBarrier.srcAccessMask = VK_ACCESS_NONE; // flush these caches from things happening before VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+        computeBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT; // invalidate these caches for VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT and later, the layout changed
 
         vkCmdPipelineBarrier(
-            computeCommandBuffer,
+            commandBuffer,
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, // from the start until compute
             0,
             0, nullptr,
@@ -230,7 +233,6 @@ class RayTracerProgram {
             1, &computeBarrier
         );
 
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[imageIndex], 0, 0);
 
         // todo calculate the bounds better
@@ -253,7 +255,7 @@ class RayTracerProgram {
         presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
         presentBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT; // because the shader just wrote to it, caches must be flushed
-        presentBarrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT; // covers all read scenarios, unsure if required
+        presentBarrier.dstAccessMask = VK_ACCESS_NONE; // bottom of pipe has no access
 
         vkCmdPipelineBarrier(
             computeCommandBuffer,
