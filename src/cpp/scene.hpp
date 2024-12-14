@@ -4,8 +4,8 @@
 #include <filesystem>
 
 #include "pch.hpp"
-#include "buffer-builder.hpp"
-#include "gpu-types.hpp"
+#include "util/buffer-builder.hpp"
+#include "util/gpu-types.hpp"
 
 struct Material {
     gpu::vec3 baseColor;
@@ -32,6 +32,18 @@ struct Mesh {
     gpu::u32 offset;
     Material material;
 };
+
+struct CameraControlsUniform {
+    gpu::vec2 resolution;
+    gpu::vec2 viewportUv;
+    gpu::f32 focalLength;
+    gpu::f32 focusDistance;
+    gpu::f32 apertureRadius;
+    gpu::u32 time;
+    gpu::vec4 origin;
+    glm::mat4 rotation;
+};
+
 
 class Scene {
     YAML::Node sceneFile;

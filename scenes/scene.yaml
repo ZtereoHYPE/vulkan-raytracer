@@ -140,7 +140,7 @@ scene:
     roughness: 0
     ior: 1.5
     is_glass: null
-    smooth_shading: true
+    smooth_shading: false
   data:
     vertices:
     - 0.372109
@@ -17815,7 +17815,7 @@ scene:
     reflectiveness: null
     roughness: null
     ior: 1.45
-    is_glass: null
+    is_glass: true
     smooth_shading: false
   data:
     vertices:

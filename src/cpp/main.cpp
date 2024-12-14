@@ -7,103 +7,127 @@ class RayTracerProgram {
     void run() {
         initVulkan();
         mainLoop();
-        //cleanup();
+        // cleanup();
     }
 
    private:
     Scene scene{ "scenes/scene.yaml" };
     Window window{ "Vulkan RayTracer", 600, 600 };
 
-    VkDevice device;
-    VkSwapchainKHR swapChain;
-    VkExtent2D swapChainExtent;
-    std::vector<VkImage> swapChainImages;
-    VkQueue presentQueue;
-    VkQueue computeQueue;
-    VkPipeline computePipeline;
-    VkPipelineLayout computePipelineLayout;
+    vk::Device device;
+    vk::SwapchainKHR swapChain;
+    vk::Extent2D swapChainExtent;
+    std::vector<vk::Image> swapChainImages;
+    vk::Queue presentQueue;
+    vk::Queue computeQueue;
+    vk::Pipeline computePipeline;
+    vk::PipelineLayout computePipelineLayout;
 
-    std::vector<VkDescriptorSet> computeDescriptorSets;
-    VkCommandBuffer computeCommandBuffer;
+    std::vector<vk::DescriptorSet> computeDescriptorSets;
+    vk::CommandBuffer computeCommandBuffer;
 
-    VkFence computeInFlightFence;
-    VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
-    VkSemaphore computeFinishedSemaphore = VK_NULL_HANDLE;
+    vk::Fence computeInFlightFence;
+    vk::Semaphore imageAvailableSemaphore = VK_NULL_HANDLE;
+    vk::Semaphore computeFinishedSemaphore = VK_NULL_HANDLE;
 
-    void* uniformMemoryMap;
-    void* computeSSBOMemoryMap;
+    void* uniformMemoryMap = nullptr;
+    void* computeSSBOMemoryMap = nullptr;
 
     // performance measure
     uint32_t frameCounter = 0;
     std::chrono::_V2::system_clock::time_point lastFrame;
 
-    void initVulkan() {
-        VkInstance instance = createInstance();
-        VkDebugUtilsMessengerEXT debugMsgr = setupDebugMessenger(instance);
+    // std::move_only_function<void()> cleanup;
 
-        VkSurfaceKHR surface = window.createVulkanSurface(instance);
+    void initVulkan() try {
+        vk::Instance instance = createInstance();
+        vk::DebugUtilsMessengerEXT debugMsgr = setupDebugMessenger(instance);
 
-        VkPhysicalDevice physicalDevice = pickPhysicalDevice(instance, surface);
+        vk::SurfaceKHR surface = window.createVulkanSurface(instance);
+
+        vk::PhysicalDevice physicalDevice = pickPhysicalDevice(instance, surface);
 
         QueueFamilyIndices queueFamilies = findQueueFamilies(physicalDevice, surface); //queue families that will be used
         device = createLogicalDevice(physicalDevice, queueFamilies);
 
-        vkGetDeviceQueue(device, queueFamilies.presentFamily.value(), 0, &presentQueue);
-        vkGetDeviceQueue(device, queueFamilies.computeFamily.value(), 0, &computeQueue);
+        presentQueue = device.getQueue(queueFamilies.presentFamily.value(), 0);
+        computeQueue = device.getQueue(queueFamilies.computeFamily.value(), 0);
 
-        VkFormat swapChainImageFormat;
-
-        swapChain = createSwapChain(&window,
+        vk::Format swapChainImageFormat;
+        swapChain = createSwapChain(window,
                                     physicalDevice, 
-                                    device, 
+                                    device,
                                     surface, 
                                     queueFamilies,
                                     swapChainImages, 
-                                    swapChainImageFormat, 
+                                    swapChainImageFormat,
                                     swapChainExtent);
 
-        std::vector<VkImageView> swapChainImageViews = createSwapchainViews(device, swapChainImages, swapChainImageFormat);
+        std::vector<vk::ImageView> swapChainImageViews = createSwapchainViews(device, swapChainImages, swapChainImageFormat);
 
-        VkDescriptorSetLayout computeDescriptorSetLayout = createComputeDescriptorSetLayout(device); 
+        vk::DescriptorSetLayout computeDescriptorSetLayout = createComputeDescriptorSetLayout(device);
 
         computePipeline = createComputePipeline(device, computeDescriptorSetLayout, computePipelineLayout);
 
-        VkDeviceMemory uniformMemory;
-        VkBuffer uniformBuffer = createUniformBuffer(physicalDevice, device, sizeof(UniformBufferObject), uniformMemory, uniformMemoryMap);
+        auto [uniformBuffer, uniformMemory, uniMap] = createMappedBuffer(physicalDevice, device, sizeof(CameraControlsUniform), vk::BufferUsageFlagBits::eUniformBuffer);
+        this->uniformMemoryMap = uniMap;
 
-        std::pair<size_t, size_t> sceneSizes = scene.getBufferSizes();
+        auto [infoSize, triSize] = scene.getBufferSizes();
 
-        printf("log: Total scene size: %d\n", sceneSizes.first + sceneSizes.second);
+        printf("log: Total scene size: %lu\n", infoSize + triSize);
 
-        VkDeviceMemory computeSSBOMemory;
-        VkBuffer computeSSBO = createShaderBuffer(physicalDevice, device, sceneSizes.first + sceneSizes.second, computeSSBOMemory, computeSSBOMemoryMap);
+        auto [computeSSBO, computeSSBOMemory, ssboMap] = createMappedBuffer(physicalDevice, device, infoSize + triSize, vk::BufferUsageFlagBits::eStorageBuffer);
+        this->computeSSBOMemoryMap = ssboMap;
 
-        VkImageView accumulatorView;
-        VkDeviceMemory accumulatorMemory;
-        VkImage accumulatorImage = createImage(physicalDevice, device, swapChainExtent, VK_FORMAT_R8G8B8A8_UNORM, accumulatorView, accumulatorMemory);
+        auto [accumulatorImage, accumulatorView, accumulatorMemory] = createImage(physicalDevice, device, swapChainExtent, vk::Format::eR8G8B8A8Unorm);
 
-        VkCommandPool computeCommandPool = createCommandPool(device, physicalDevice, queueFamilies.computeFamily.value());
-        transitionImageLayout(device, computeCommandPool, computeQueue, accumulatorImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+        vk::CommandPool computeCommandPool = createCommandPool(device, queueFamilies.computeFamily.value());
+        transitionImageLayout(device, computeCommandPool, computeQueue, accumulatorImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
 
-        VkDescriptorPool descriptorPool = createDescriptorPool(device, swapChainImageViews.size());
-        VkSampler sampler = createSampler(device);
+        vk::DescriptorPool descriptorPool = createDescriptorPool(device, swapChainImageViews.size());
+        vk::Sampler sampler = createSampler(device);
 
         computeCommandBuffer = createCommandBuffer(device, computeCommandPool);
 
-        computeDescriptorSets = createComputeDescriptorSets(device, 
+        computeDescriptorSets =  createComputeDescriptorSets(device,
                                                             computeDescriptorSetLayout, 
                                                             descriptorPool, 
                                                             uniformBuffer, 
                                                             computeSSBO, 
-                                                            sceneSizes.first, 
+                                                            infoSize,
                                                             accumulatorView, 
                                                             swapChainImageViews, 
                                                             sampler);
 
+        vk::SemaphoreCreateInfo semaphoreInfo {
+            .sType = vk::StructureType::eSemaphoreCreateInfo
+        };
+        imageAvailableSemaphore = device.createSemaphore(semaphoreInfo);
+        computeFinishedSemaphore = device.createSemaphore(semaphoreInfo);
+        computeInFlightFence = device.createFence({
+            .sType = vk::StructureType::eFenceCreateInfo,
+            .flags = vk::FenceCreateFlagBits::eSignaled // it should start pre-signaled so the first frame doesnt have to wait forever
+        });
 
-        createSyncObjects();
+        // cleanup = std::bind([
+        //     instance = std::move(instance),
+        //     debugMsgr = std::move(debugMsgr),
+        //     surface = std::move(surface),
+        //     physicalDevice = std::move(physicalDevice),
+        //     swapChainImageViews = std::move(swapChainImageViews),
+        //     computeDescriptorSetLayout = std::move(computeDescriptorSetLayout),
+        //     computeCommandPool = std::move(computeCommandPool),
+        //     descriptorPool = std::move(descriptorPool),
+        //     sampler = std::move(sampler)
+        // ] {});
 
         printf("log: initialized vulkan context\n");
+
+    } catch (std::runtime_error &error) {
+        // error handler
+        std::cout << "A runtime error occurred! The program will now terminate" << std::endl;
+
+        throw; // rethrow to halt execution
     }
 
     void mainLoop() {
@@ -115,13 +139,13 @@ class RayTracerProgram {
         }
 
         // wait until all submitted stuff is done
-        vkDeviceWaitIdle(device);
+        device.waitIdle();
     }
-    
+
     void drawFrame() {
         // Frame time calculations
         auto currentTime = std::chrono::high_resolution_clock::now();
-        auto duration = duration_cast<std::chrono::milliseconds>(currentTime - lastFrame);
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastFrame);
 
         auto fps = 1000.0 / duration.count();
         std::cout << "FPS: " << fps << std::endl;
@@ -131,144 +155,128 @@ class RayTracerProgram {
 
         // No need to fence on the presentation as we only start computing when the next swapchain image is available
         // We do need to fence on compute because we'll get a new image while the previous is still computing!
-        vkWaitForFences(device, 1, &computeInFlightFence, VK_TRUE, UINT64_MAX);
+        if (device.waitForFences(computeInFlightFence, vk::True, UINT64_MAX) == vk::Result::eTimeout)
+            throw std::runtime_error("Fence timed out");
 
-        uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+        auto [result, imageIndex] = device.acquireNextImageKHR(swapChain, UINT64_MAX, imageAvailableSemaphore);
 
         // Suboptimal swapchain images are still considered good as they can still be presented
         // If the swapchain is completely out of date, throw an error as it shouldn't happen.
-        if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
             throw std::runtime_error("failed to acquire swap chain image!");
         }
-        
-        vkResetCommandBuffer(computeCommandBuffer, 0);
+
+        computeCommandBuffer.reset();
 
         updateUniformBuffer(uniformMemoryMap);
         recordComputeCommandBuffer(computeCommandBuffer, imageIndex);
+        device.resetFences(computeInFlightFence);
 
-        vkResetFences(device, 1, &computeInFlightFence);
-        VkPipelineStageFlags stage[] = { VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT };
+        vk::PipelineStageFlags stage[] = {
+            vk::PipelineStageFlagBits::eComputeShader
+        };
 
-        VkSubmitInfo submitInfo {};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = &imageAvailableSemaphore;
-        submitInfo.pWaitDstStageMask = stage;
-
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &computeCommandBuffer;
-
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &computeFinishedSemaphore; // to signal when compute commands are done executing
+        vk::SubmitInfo submitInfo {
+            .sType = vk::StructureType::eSubmitInfo,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &imageAvailableSemaphore,
+            .pWaitDstStageMask = stage,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &computeCommandBuffer,
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &computeFinishedSemaphore, // to signal when compute commands are done executing
+        };
 
         // signal computeInFlightFence when the command buffer can be reused
-        if (vkQueueSubmit(computeQueue, 1, &submitInfo, computeInFlightFence) != VK_SUCCESS) {
-            throw std::runtime_error("failed to submit compute command buffer!");
-        };
+        computeQueue.submit(submitInfo, computeInFlightFence);
 
         /* PRESENTATION */
 
-        VkPresentInfoKHR presentInfo {};
-        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        vk::PresentInfoKHR presentInfo {
+            .sType = vk::StructureType::ePresentInfoKHR,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &computeFinishedSemaphore, // wait until the compute is done
+            .swapchainCount = 1,
+            .pSwapchains = {&swapChain},
+            .pImageIndices = &imageIndex
+        };
 
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = &computeFinishedSemaphore; // wait until the compute is done
-
-        VkSwapchainKHR swapChains[] = { swapChain };
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = swapChains;
-        presentInfo.pImageIndices = &imageIndex;
-
-        result = vkQueuePresentKHR(presentQueue, &presentInfo);
-
-        // Here there are no consequences as we already presented the frame, so suboptimal = bad
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-            //recreateSwapChain(window, physicalDevice, device, surface, swapChain, renderPass,);
-        } else if (result != VK_SUCCESS) {
+        if (presentQueue.presentKHR(presentInfo) != vk::Result::eSuccess) {
             throw std::runtime_error("failed to present swap chain image!");
         }
 
         frameCounter++;
     }
 
-    void recordComputeCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
-        VkCommandBufferBeginInfo beginInfo {};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    void recordComputeCommandBuffer(vk::CommandBuffer &commandBuffer, uint32_t imageIndex) {
+        commandBuffer.begin({
+            .sType = vk::StructureType::eCommandBufferBeginInfo
+        });
 
-        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-            throw std::runtime_error("failed to begin recording command buffer!");
-        }
-
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
 
         // Transition the layout of the image to one compute shaders can output to (VK_IMAGE_LAYOUT_GENERAL)
         // todo: this ideally happens before waiting for the fence, or the fence shouldn't exist at all
-        VkImageMemoryBarrier computeBarrier {};
-        computeBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        computeBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; // discard the previous contents of the image
-        computeBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        computeBarrier.image = swapChainImages[imageIndex];
-        computeBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        computeBarrier.subresourceRange.baseMipLevel = 0;
-        computeBarrier.subresourceRange.levelCount = 1;
-        computeBarrier.subresourceRange.baseArrayLayer = 0;
-        computeBarrier.subresourceRange.layerCount = 1;
+        vk::ImageMemoryBarrier layoutTransition = {
+            .sType = vk::StructureType::eImageMemoryBarrier,
+            // https://themaister.net/blog/2019/08/14/yet-another-blog-explaining-vulkan-synchronization/
+            .srcAccessMask = vk::AccessFlagBits::eNone, // flush these caches from things happening before VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+            .dstAccessMask = vk::AccessFlagBits::eShaderWrite, // invalidate these caches for VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT and later, the layout changed
+            .oldLayout = vk::ImageLayout::eUndefined, // discard the previous contents of the image
+            .newLayout = vk::ImageLayout::eGeneral,
+            // we aren't transferring ownership
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = swapChainImages[imageIndex],
+            .subresourceRange = {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        };
 
-        // we aren't transferring ownership
-        computeBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        computeBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-        // https://themaister.net/blog/2019/08/14/yet-another-blog-explaining-vulkan-synchronization/
-        computeBarrier.srcAccessMask = VK_ACCESS_NONE; // flush these caches from things happening before VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-        computeBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT; // invalidate these caches for VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT and later, the layout changed
-
-        vkCmdPipelineBarrier(
-            commandBuffer,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, // from the start until compute
-            0,
-            0, nullptr,
-            0, nullptr,
-            1, &computeBarrier
+        commandBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eTopOfPipe,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlags(0), nullptr, nullptr,
+            layoutTransition
         );
 
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[imageIndex], 0, 0);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, computePipelineLayout, 0, computeDescriptorSets[imageIndex], nullptr);
 
-        // todo calculate the bounds better
-        vkCmdDispatch(commandBuffer, swapChainExtent.width / TILE_SIZE + 1, swapChainExtent.height / TILE_SIZE + 1, 1);
+        // todo calculate the bounds better: this dispatches an extra unit row when width % TILE_SIZE == 0
+        commandBuffer.dispatch(swapChainExtent.width / TILE_SIZE + 1, swapChainExtent.height / TILE_SIZE + 1, 1);
 
         // Transition the image to a presentable layout (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-        VkImageMemoryBarrier presentBarrier {};
-        presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        presentBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-        presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        presentBarrier.image = swapChainImages[imageIndex];
-        presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        presentBarrier.subresourceRange.baseMipLevel = 0;
-        presentBarrier.subresourceRange.levelCount = 1;
-        presentBarrier.subresourceRange.baseArrayLayer = 0;
-        presentBarrier.subresourceRange.layerCount = 1;
-
-        // we aren't transferring ownership
-        presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-        presentBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT; // because the shader just wrote to it, caches must be flushed
-        presentBarrier.dstAccessMask = VK_ACCESS_NONE; // bottom of pipe has no access
-
-        vkCmdPipelineBarrier(
-            computeCommandBuffer,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, // from compute until the end
-            0,
-            0, nullptr,
-            0, nullptr,
-            1, &presentBarrier
+        layoutTransition = {
+            .sType = vk::StructureType::eImageMemoryBarrier,
+            // https://themaister.net/blog/2019/08/14/yet-another-blog-explaining-vulkan-synchronization/
+            .srcAccessMask = vk::AccessFlagBits::eShaderWrite, // because the shader just wrote to it, caches must be flushed
+            .dstAccessMask = vk::AccessFlagBits::eNone, // bottom of pipe has no access
+            .oldLayout = vk::ImageLayout::eGeneral, // discard the previous contents of the image
+            .newLayout = vk::ImageLayout::ePresentSrcKHR,
+            // we aren't transferring ownership
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = swapChainImages[imageIndex],
+            .subresourceRange = {
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        };
+        computeCommandBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eBottomOfPipe,
+            vk::DependencyFlags(0), nullptr, nullptr,
+            layoutTransition
         );
 
-        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-            throw std::runtime_error("failed to record command buffer!");
-        }
+        commandBuffer.end();
     }
 
     void updateUniformBuffer(void* uniformMemoryMap) {
@@ -278,7 +286,7 @@ class RayTracerProgram {
 
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        auto origin = glm::vec4(0, 1, 3, 0);
+        auto origin = gpu::vec4(0, 1, 3, 0);
         //auto origin = glm::vec4(-0.45206, 0.322176, 0.2, 0);
 
         float ratio = swapChainExtent.width / (float) swapChainExtent.height;
@@ -292,15 +300,15 @@ class RayTracerProgram {
             v = 1/ratio;
         }
 
-        UniformBufferObject ubo {
-            .resolution = glm::vec2(swapChainExtent.width, swapChainExtent.height),
-            .viewportUv = glm::vec2(u, v),
+        CameraControlsUniform ubo {
+            .resolution = gpu::vec2(swapChainExtent.width, swapChainExtent.height),
+            .viewportUv = gpu::vec2(u, v),
             .focalLength = 1.0,
             .focusDistance = 4.8,
             .apertureRadius = 0.0,
             .time = frameCounter,
             .origin = origin,
-            .rotation = glm::rotate(glm::identity<glm::mat4>(), 3.14f, glm::vec3(0, 1, 0)), // glm::identity<glm::mat4>(),
+            .rotation = rotate(glm::identity<glm::mat4>(), 3.14f, glm::vec3(0, 1, 0)), // glm::identity<glm::mat4>(),
         };
 
         // not super efficient, kinda like staging buffers we need push constants or whatever
@@ -315,22 +323,7 @@ class RayTracerProgram {
 
         // write to the gpu memory
         infoBuffer.write(shaderBufferMemoryMap);
-        triangleBuffer.write(shaderBufferMemoryMap + infoBuffer.getOffset());
-    }
-
-    void createSyncObjects() {
-        VkSemaphoreCreateInfo semaphoreInfo {};
-        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-        VkFenceCreateInfo fenceInfo {};
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // it should start pre-signaled so the first frame doesnt have to wait forever
-
-        if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphore) != VK_SUCCESS ||
-            vkCreateSemaphore(device, &semaphoreInfo, nullptr, &computeFinishedSemaphore) != VK_SUCCESS ||
-            vkCreateFence(device, &fenceInfo, nullptr, &computeInFlightFence) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create sync stuff!");
-        }
+        triangleBuffer.write(shaderBufferMemoryMap + infoBuffer.getOffset()); // gcc-ism
     }
 };
 

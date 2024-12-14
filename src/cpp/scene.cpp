@@ -119,7 +119,7 @@ void Scene::populateSphere(YAML::Node mesh, BufferBuilder &meshes, BufferBuilder
     // append the mesh to the mesh info buffer
     meshes.append<Mesh>({
         .triangle_count = 0,
-        .offset = (gpu::u32) triangles.getRelativeOffset<Triangle>(),
+        .offset = static_cast<gpu::u32>(triangles.getRelativeOffset<Triangle>()),
         .material = meshMaterial
     });
 

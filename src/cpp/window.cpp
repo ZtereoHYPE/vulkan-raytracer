@@ -14,7 +14,7 @@ Window::Window(const char *title, int initialWidth, int initialHeight) {
     printf("log: initialized glfw\n");
 }
 
-void Window::terminate() {
+void Window::terminate() const {
     glfwDestroyWindow(this->glfwWindow);
     glfwTerminate();
 }
@@ -35,11 +35,11 @@ bool Window::shouldClose() {
     return glfwWindowShouldClose(glfwWindow);
 }
 
-VkSurfaceKHR Window::createVulkanSurface(VkInstance instance) {
+vk::SurfaceKHR Window::createVulkanSurface(vk::Instance const &instance) const {
     VkSurfaceKHR surface;
 
     if (glfwCreateWindowSurface(instance, glfwWindow, nullptr, &surface) != VK_SUCCESS) {
-        std::runtime_error("Failed to create window surface!");
+        throw std::runtime_error("Failed to create window surface!");
     }
 
     return surface;

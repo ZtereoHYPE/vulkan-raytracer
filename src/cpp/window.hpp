@@ -1,8 +1,8 @@
 #pragma once
 
 #include "pch.hpp"
-#include <unordered_map>
 #include <GLFW/glfw3.h>
+#include <vulkan/vulkan_raii.hpp>
 
 
 struct Window {
@@ -13,10 +13,10 @@ struct Window {
     Window(const char *title, int initialWidth, int initialHeight);
     Window(const Window &obj) = delete; // do not allow copies of this class
 
-    VkSurfaceKHR createVulkanSurface(VkInstance instance);
+    vk::SurfaceKHR createVulkanSurface(vk::Instance const &instance) const;
     void getFramebufferSize(int *width, int *height);
     void waitEvents();
     void pollEvents();
     bool shouldClose();
-    void terminate();
+    void terminate() const;
 };
