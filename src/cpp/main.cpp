@@ -11,7 +11,7 @@ class RayTracerProgram {
     }
 
    private:
-    Scene scene{ "scenes/scene.yaml" };
+    Scene scene{ "scenes/oldScene.yaml" };
     Window window{ "Vulkan RayTracer", 600, 600 };
 
     vk::Device device;
@@ -72,11 +72,11 @@ class RayTracerProgram {
         auto [uniformBuffer, uniformMemory, uniMap] = createMappedBuffer(physicalDevice, device, sizeof(CameraControlsUniform), vk::BufferUsageFlagBits::eUniformBuffer);
         this->uniformMemoryMap = uniMap;
 
-        auto [infoSize, triSize] = scene.getBufferSizes();
+        auto [bvhSize, matSize, triSize] = scene.getBufferSizes();
 
-        printf("log: Total scene size: %lu\n", infoSize + triSize);
+        printf("log: Total scene size: %lu + %lu + %lu = %lu\n", bvhSize, matSize, triSize, bvhSize + matSize + triSize);
 
-        auto [computeSSBO, computeSSBOMemory, ssboMap] = createMappedBuffer(physicalDevice, device, infoSize + triSize, vk::BufferUsageFlagBits::eStorageBuffer);
+        auto [computeSSBO, computeSSBOMemory, ssboMap] = createMappedBuffer(physicalDevice, device, bvhSize + matSize + triSize, vk::BufferUsageFlagBits::eStorageBuffer);
         this->computeSSBOMemoryMap = ssboMap;
 
         auto [accumulatorImage, accumulatorView, accumulatorMemory] = createImage(physicalDevice, device, swapChainExtent, vk::Format::eR8G8B8A8Unorm);
@@ -94,7 +94,8 @@ class RayTracerProgram {
                                                             descriptorPool, 
                                                             uniformBuffer, 
                                                             computeSSBO, 
-                                                            infoSize,
+                                                            bvhSize,
+                                                            matSize,
                                                             accumulatorView, 
                                                             swapChainImageViews, 
                                                             sampler);
@@ -109,21 +110,11 @@ class RayTracerProgram {
             .flags = vk::FenceCreateFlagBits::eSignaled // it should start pre-signaled so the first frame doesnt have to wait forever
         });
 
-        // cleanup = std::bind([
-        //     instance = std::move(instance),
-        //     debugMsgr = std::move(debugMsgr),
-        //     surface = std::move(surface),
-        //     physicalDevice = std::move(physicalDevice),
-        //     swapChainImageViews = std::move(swapChainImageViews),
-        //     computeDescriptorSetLayout = std::move(computeDescriptorSetLayout),
-        //     computeCommandPool = std::move(computeCommandPool),
-        //     descriptorPool = std::move(descriptorPool),
-        //     sampler = std::move(sampler)
-        // ] {});
+        //cleanup = std::bind([&] {});
 
         printf("log: initialized vulkan context\n");
 
-    } catch (std::runtime_error &error) {
+    } catch (std::runtime_error &) {
         // error handler
         std::cout << "A runtime error occurred! The program will now terminate" << std::endl;
 
@@ -131,7 +122,7 @@ class RayTracerProgram {
     }
 
     void mainLoop() {
-        pushWorldData(computeSSBOMemoryMap);
+        scene.writeBuffers(computeSSBOMemoryMap);
 
         while (!window.shouldClose()) {
             window.pollEvents();
@@ -147,8 +138,7 @@ class RayTracerProgram {
         auto currentTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastFrame);
 
-        auto fps = 1000.0 / duration.count();
-        std::cout << "FPS: " << fps << std::endl;
+        std::cout << "ms: " << duration.count() << std::endl;
         lastFrame = currentTime;
 
         /* COMPUTE SUBMISSION */
@@ -280,14 +270,7 @@ class RayTracerProgram {
     }
 
     void updateUniformBuffer(void* uniformMemoryMap) {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-
-        auto currentTime = std::chrono::high_resolution_clock::now();
-
-        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-        auto origin = gpu::vec4(0, 1, 3, 0);
-        //auto origin = glm::vec4(-0.45206, 0.322176, 0.2, 0);
+        CameraControlsUniform ubo = scene.getCameraControls();
 
         float ratio = swapChainExtent.width / (float) swapChainExtent.height;
         float u, v;
@@ -300,30 +283,12 @@ class RayTracerProgram {
             v = 1/ratio;
         }
 
-        CameraControlsUniform ubo {
-            .resolution = gpu::vec2(swapChainExtent.width, swapChainExtent.height),
-            .viewportUv = gpu::vec2(u, v),
-            .focalLength = 1.0,
-            .focusDistance = 4.8,
-            .apertureRadius = 0.0,
-            .time = frameCounter,
-            .origin = origin,
-            .rotation = rotate(glm::identity<glm::mat4>(), 3.14f, glm::vec3(0, 1, 0)), // glm::identity<glm::mat4>(),
-        };
+        ubo.viewportUv = gpu::vec2(u, v);
+        ubo.time = frameCounter;
 
-        // not super efficient, kinda like staging buffers we need push constants or whatever
+        // not super efficient as the memory has to be host-visible and writeable
+        // if this matters at all, push constants could be a solution
         memcpy(uniformMemoryMap, &ubo, sizeof(ubo));
-    }
-
-    void pushWorldData(void* shaderBufferMemoryMap) {
-        BufferBuilder infoBuffer = BufferBuilder {};
-        BufferBuilder triangleBuffer = BufferBuilder {};
-
-        scene.populateBuffers(infoBuffer, triangleBuffer);
-
-        // write to the gpu memory
-        infoBuffer.write(shaderBufferMemoryMap);
-        triangleBuffer.write(shaderBufferMemoryMap + infoBuffer.getOffset()); // gcc-ism
     }
 };
 

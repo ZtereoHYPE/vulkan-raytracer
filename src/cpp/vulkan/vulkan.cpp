@@ -626,9 +626,17 @@ DescriptorSetLayout createComputeDescriptorSetLayout(Device const &device) {
         .stageFlags = ShaderStageFlagBits::eCompute, // only for compute
     };
 
-    // This buffer will contain the sphere data
-    DescriptorSetLayoutBinding sphereLayoutBinding {
+    // This buffer will contain the bvh data
+    DescriptorSetLayoutBinding bvhLayoutBinding {
         .binding = 1,
+        .descriptorType = DescriptorType::eStorageBuffer,
+        .descriptorCount = 1,
+        .stageFlags = ShaderStageFlagBits::eCompute,
+    };
+
+    // This buffer will contain the material data
+    DescriptorSetLayoutBinding materialLayoutBinding {
+        .binding = 2,
         .descriptorType = DescriptorType::eStorageBuffer,
         .descriptorCount = 1,
         .stageFlags = ShaderStageFlagBits::eCompute,
@@ -636,7 +644,7 @@ DescriptorSetLayout createComputeDescriptorSetLayout(Device const &device) {
 
     // This buffer will contain the triangle data
     DescriptorSetLayoutBinding triangleLayoutBinding {
-        .binding = 2,
+        .binding = 3,
         .descriptorType = DescriptorType::eStorageBuffer,
         .descriptorCount = 1,
         .stageFlags = ShaderStageFlagBits::eCompute,
@@ -644,7 +652,7 @@ DescriptorSetLayout createComputeDescriptorSetLayout(Device const &device) {
 
     // This is the image where the ray traced frames will be accumulated
     DescriptorSetLayoutBinding accumulatorLayoutBinding {
-        .binding = 3,
+        .binding = 4,
         .descriptorType = DescriptorType::eStorageImage,
         .descriptorCount = 1,
         .stageFlags = ShaderStageFlagBits::eCompute,
@@ -652,14 +660,14 @@ DescriptorSetLayout createComputeDescriptorSetLayout(Device const &device) {
 
     // This is the swapchain image that will be bound
     DescriptorSetLayoutBinding swapchainLayoutBinding {
-        .binding = 4,
+        .binding = 5,
         .descriptorType = DescriptorType::eStorageImage,
         .descriptorCount = 1,
         .stageFlags = ShaderStageFlagBits::eCompute,
     };
 
     std::vector bindings = {
-        uboLayoutBinding, sphereLayoutBinding, triangleLayoutBinding, accumulatorLayoutBinding, swapchainLayoutBinding
+        uboLayoutBinding, bvhLayoutBinding, materialLayoutBinding, triangleLayoutBinding, accumulatorLayoutBinding, swapchainLayoutBinding
     };
 
     DescriptorSetLayoutCreateInfo layoutInfo {
@@ -690,7 +698,8 @@ std::vector<DescriptorSet> createComputeDescriptorSets(Device const &device,
                                                        DescriptorPool const &descriptorPool,
                                                        Buffer const &uniformBuffer,
                                                        Buffer const &shaderBuffer,
-                                                       uint offset,
+                                                       uint bvhSize,
+                                                       uint matSize,
                                                        ImageView const &accumulatorImageView,
                                                        std::vector<ImageView> swapChainImageViews,
                                                        Sampler sampler) {
@@ -716,15 +725,21 @@ std::vector<DescriptorSet> createComputeDescriptorSets(Device const &device,
             .range = WholeSize,
         };
 
-        DescriptorBufferInfo meshInfoBufferInfo {
+        DescriptorBufferInfo bvhBufferInfo {
             .buffer = shaderBuffer,
             .offset = 0,
-            .range = offset,
+            .range = bvhSize,
+        };
+
+        DescriptorBufferInfo materialBufferInfo {
+            .buffer = shaderBuffer,
+            .offset = bvhSize,
+            .range = matSize,
         };
 
         DescriptorBufferInfo triangleBufferInfo {
             .buffer = shaderBuffer,
-            .offset = offset,
+            .offset = bvhSize + matSize,
             .range = WholeSize,
         };
 
@@ -755,7 +770,7 @@ std::vector<DescriptorSet> createComputeDescriptorSets(Device const &device,
                 .dstBinding = 1,
                 .descriptorCount = 1,
                 .descriptorType = DescriptorType::eStorageBuffer,
-                .pBufferInfo = &meshInfoBufferInfo,
+                .pBufferInfo = &bvhBufferInfo,
             },
             (WriteDescriptorSet) {
                 .sType = StructureType::eWriteDescriptorSet,
@@ -763,12 +778,20 @@ std::vector<DescriptorSet> createComputeDescriptorSets(Device const &device,
                 .dstBinding = 2,
                 .descriptorCount = 1,
                 .descriptorType = DescriptorType::eStorageBuffer,
-                .pBufferInfo = &triangleBufferInfo,
+                .pBufferInfo = &materialBufferInfo,
             },
             (WriteDescriptorSet) {
                 .sType = StructureType::eWriteDescriptorSet,
                 .dstSet = descriptorSets[i],
                 .dstBinding = 3,
+                .descriptorCount = 1,
+                .descriptorType = DescriptorType::eStorageBuffer,
+                .pBufferInfo = &triangleBufferInfo,
+            },
+            (WriteDescriptorSet) {
+                .sType = StructureType::eWriteDescriptorSet,
+                .dstSet = descriptorSets[i],
+                .dstBinding = 4,
                 .descriptorCount = 1,
                 .descriptorType = DescriptorType::eStorageImage,
                 .pImageInfo = &accumulatorImageInfo,
@@ -776,7 +799,7 @@ std::vector<DescriptorSet> createComputeDescriptorSets(Device const &device,
             (WriteDescriptorSet) {
                 .sType = StructureType::eWriteDescriptorSet,
                 .dstSet = descriptorSets[i],
-                .dstBinding = 4,
+                .dstBinding = 5,
                 .descriptorCount = 1,
                 .descriptorType = DescriptorType::eStorageImage,
                 .pImageInfo = &swapchainImageInfo,

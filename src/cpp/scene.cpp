@@ -1,70 +1,103 @@
 #include "scene.hpp"
 
+gpu::vec3 Triangle::minBound() const {
+    if (isSphere) {
+        return vertices[0] + gpu::vec3(vertices[1][0],vertices[1][0],vertices[1][0]);
+    } else {
+        return gpu::min(gpu::min(vertices[0], vertices[1]), vertices[2]);
+    }
+}
+
+gpu::vec3 Triangle::maxBound() const {
+    if (isSphere) {
+        return vertices[0] - gpu::vec3(vertices[1][0],vertices[1][0],vertices[1][0]);
+    } else {
+        return gpu::max(gpu::max(vertices[0], vertices[1]), vertices[2]);
+    }
+    
+}
+
 /* EXAMPLE CONFIG:
  *
  *  version: 0.1
+ * 
+ *  camera:
+ *    resolution: [300, 400]
+ *    location: [1, 2, 3.4]
+ *    rotation: [0, 90, 0]  # in degrees for each axys
+ *    focal_length: 1.1
+ *    focus_distance: 5.4
+ *    aperture_radius: 0  # DoF disabled
+ * 
  *  scene:
- *      - Mesh Name:
- *          type: TriMesh
- *          material:
- *              base_color: [0.7, 0.7, 0.7]
- *          data:
- *              vertices: [0.3, 0.5, -4, ...]
- *              normals: [0, 1, 0, ...]  
+ *    - Mesh Name:
+ *        type: TriMesh
+ *        material:
+ *          base_color: [0.7, 0.7, 0.7]
+ *        data:
+ *          vertices: [0.3, 0.5, -4, ...]
+ *          normals: [0, 1, 0, ...]  
  *
- *      - Sun:
- *          type: Sphere
- *          material:
- *              base_color: [1, 1, 1]
- *              emission: [10, 10, 10]
- *          data:
- *              center: [100, 100, 100]
- *              radius: 50
+ *    - Sun:
+ *        type: Sphere
+ *        material:
+ *          base_color: [1, 1, 1]
+ *          emission: [10, 10, 10]
+ *        data:
+ *          center: [100, 100, 100]
+ *          radius: 50
  */
 
 const std::string CONFIG_VERSION = "0.1";
 
 Scene::Scene(std::filesystem::path path)
 :
-    sceneFile(YAML::LoadFile(path))
+    root(YAML::LoadFile(path))
 {
     validateFile();
+    loadCameraControls();
+    loadMeshes();
+    buildBVH();
 }
 
-std::pair<size_t, size_t> Scene::getBufferSizes() {
-    BufferBuilder meshes, triangles;
+std::tuple<size_t, size_t, size_t> Scene::getBufferSizes() {
+    // todo: perhaps find a more efficient way to calculate them
+    BufferBuilder bvhBuf, matBuf, triBuf;
+    for (auto node : components.bvh)
+        bvhBuf.append(node);
 
-    // quite expensive but also guaranteed not to break
-    populateBuffers(meshes, triangles);
-    return std::pair(meshes.getOffset(), triangles.getOffset());
+    for (auto material : components.materials)
+        matBuf.append(material);
+
+    for (auto triangle : components.triangles)
+        triBuf.append(triangle);
+
+    return std::make_tuple(bvhBuf.getOffset(), matBuf.getOffset(), triBuf.getOffset());
 }
 
-void Scene::populateBuffers(BufferBuilder &meshes, BufferBuilder &triangles) {
-    typedef std::string str;
+CameraControlsUniform Scene::getCameraControls() {
+    // return components.camera;
 
-    meshes.append((gpu::u32)sceneFile["scene"].size()); // mesh_count
-    meshes.pad(12); // alignment rules
-
-    for (auto mesh : sceneFile["scene"]) {
-        if (mesh["type"].as<str>() == "TriMesh") {
-            populateTriMesh(mesh, meshes, triangles);
-
-        } else if (mesh["type"].as<str>() == "Sphere") {
-            populateSphere(mesh, meshes, triangles);
-        }
-    }
+    return {
+        .resolution = gpu::vec2(900, 900),
+        .focalLength = 1.0,
+        .focusDistance = 4.8,
+        .apertureRadius = 0.0,
+        .location = gpu::vec4(0, 1, 3, 0),
+        .rotation = rotate(glm::identity<glm::mat4>(), 3.14f, glm::vec3(0, 1, 0)), // glm::identity<glm::mat4>(),
+    };
 }
 
 void Scene::validateFile() {
     typedef std::string str;
 
     // check the version is correct
-    if (sceneFile["version"].as<str>() != CONFIG_VERSION) {
+    if (root["version"].as<str>() != CONFIG_VERSION) {
         throw std::runtime_error("Scene file is of incompatible version!");
     }
 
     // check that the data fields in each mesh match the type
-    for (auto mesh : sceneFile["scene"]) {
+    for (auto mesh : root["scene"]) {
         if (mesh["type"].as<str>() == "TriMesh") {
             assertTrue(mesh["data"]["vertices"].IsSequence());
             assertTrue(mesh["data"]["normals"].IsSequence());
@@ -75,7 +108,7 @@ void Scene::validateFile() {
 
             assertTrue(vertices.size() == normals.size());
             assertTrue(vertices.size() % 9 == 0);
-            assertTrue(vertices.size() != 0);
+            assertTrue(!vertices.empty());
 
         } else if (mesh["type"].as<str>() == "Sphere") {
             assertTrue(mesh["data"]["center"].IsSequence());
@@ -84,52 +117,88 @@ void Scene::validateFile() {
     }
 }
 
-void Scene::populateTriMesh(YAML::Node mesh, BufferBuilder &meshes, BufferBuilder &triangles) {
-    Material meshMaterial = getMaterial(mesh["material"]);
+void Scene::loadCameraControls() {
+    typedef std::string str;
+
+    // todo: load them!
+}
+
+void Scene::writeBuffers(void *memory) {
+    BufferBuilder memoryBuf;
+    for (auto node : components.bvh)
+        memoryBuf.append(node);
+
+    for (auto material : components.materials)
+        memoryBuf.append(material);
+
+    for (auto triangle : components.triangles)
+        memoryBuf.append(triangle);
+
+    memoryBuf.write(memory);
+}
+
+void Scene::loadMeshes() {
+    typedef std::string str;
+
+    for (auto mesh : root["scene"]) {
+        if (mesh["type"].as<str>() == "TriMesh") {
+            loadTriMesh(static_cast<YAML::Node>(mesh));
+
+        } else if (mesh["type"].as<str>() == "Sphere") {
+            loadSphere(static_cast<YAML::Node>(mesh));
+        }
+    }
+}
+
+void Scene::loadTriMesh(YAML::Node mesh) {
     auto verts = mesh["data"]["vertices"].as<std::vector<float>>();
     auto norms = mesh["data"]["normals"].as<std::vector<float>>();
 
-    // this is ensured with validateFile
-    gpu::u32 triangleAmt = verts.size() / 9;
+    // this is guaranteed by validateFile
+    size_t triangleAmt = verts.size() / 9;
 
-    // append the mesh to the mesh info buffer
-    meshes.append<Mesh>({
-        .triangle_count = triangleAmt,
-        .offset = (gpu::u32) triangles.getRelativeOffset<Triangle>(),
-        .material = meshMaterial
-    });
+    // append the material 
+    uint materialIdx = components.materials.size();
+    components.materials.push_back(getMaterial(mesh["material"]));
 
     // append the triangles
     for (size_t i = 0; i < triangleAmt; ++i) {
-        Triangle tri;
+        Triangle tri{
+            .materialIdx = materialIdx,
+            .isSphere = false
+        };
 
-        for (int j = 0; j < 3; j++) {
-            int off = i * 9 + j * 3;
+        for (size_t j = 0; j < 3; j++) {
+            size_t off = i * 9 + j * 3;
             tri.vertices[j] = gpu::vec3(verts[off], verts[off+1], verts[off+2]);
             tri.normals[j] = gpu::vec3(norms[off], norms[off+1], norms[off+2]);
         }
 
-        triangles.append(tri);
+        components.triangles.push_back(tri);
     }
 }
 
-void Scene::populateSphere(YAML::Node mesh, BufferBuilder &meshes, BufferBuilder &triangles) {
-    Material meshMaterial = getMaterial(mesh["material"]);
+void Scene::loadSphere(YAML::Node sphere) {
+    // append the material
+    uint materialIdx = components.materials.size();
+    components.materials.push_back(getMaterial(sphere["material"]));
 
-    // append the mesh to the mesh info buffer
-    meshes.append<Mesh>({
-        .triangle_count = 0,
-        .offset = static_cast<gpu::u32>(triangles.getRelativeOffset<Triangle>()),
-        .material = meshMaterial
-    });
+    auto center = sphere["data"]["center"].as<std::vector<gpu::f32>>();
 
-    auto center = mesh["data"]["center"].as<std::vector<gpu::f32>>();
+    Triangle tri{};
+    tri.vertices[0] = gpu::vec3(center[0], center[1], center[2]);
+    tri.vertices[1] = gpu::vec3(sphere["data"]["radius"].as<float>(), 0, 0);
+    tri.materialIdx = materialIdx;
+    tri.isSphere = true;
 
-    // append the sphere
-    triangles.append<Sphere>({
-        .center = gpu::vec3(center[0], center[1], center[2]),
-        .radius = mesh["data"]["radius"].as<float>(),
-    }, sizeof(Triangle));
+    // append the sphere. Unfortunately this wastes an entire triangle.
+    components.triangles.push_back(tri);
+}
+
+void Scene::buildBVH() {
+    std::cout << "building BVH..." << "\n";
+    components.bvh = BvhBuilder(components.triangles).buildBvh();
+    std::cout << "done!" << "\n";
 }
 
 Material Scene::getMaterial(YAML::Node node) {
@@ -153,4 +222,3 @@ void assertTrue(bool value) {
         throw std::runtime_error("The configuration has one or more mistakes.");
     }
 }
-

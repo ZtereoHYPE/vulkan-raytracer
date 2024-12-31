@@ -50,23 +50,6 @@ class BufferBuilder {
 
     void pad(size_t amt);
 
-    /*
-     * Gets the offset of a given memory location relative to a specific
-     * type.
-     * 
-     * For example, if the index of an integer in an array of integers is needed,
-     * it can be obtained by calling getRelativeOffset<int>() on the buffer builder.
-     */
-    template<typename Type>
-    size_t getRelativeOffset() {
-        if (currentOffset == 0)
-            return 0;
-
-        if ((currentOffset % sizeof(Type)) != 0)
-            throw std::runtime_error("Trying to get offset with regards to type not granular enough");
-    
-        return currentOffset / sizeof(Type);
-    };
 
     void write(void *memory);
 

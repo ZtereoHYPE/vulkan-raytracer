@@ -93,7 +93,8 @@ std::vector<vk::DescriptorSet> createComputeDescriptorSets(vk::Device const &dev
                                                            vk::DescriptorPool const &descriptorPool,
                                                            vk::Buffer const &uniformBuffer,
                                                            vk::Buffer const &shaderBuffer,
-                                                           uint offset,
+                                                           uint bvhSize,
+                                                           uint matSize,
                                                            vk::ImageView const &accumulatorImageView,
                                                            std::vector<vk::ImageView> swapChainImageViews,
                                                            vk::Sampler sampler);

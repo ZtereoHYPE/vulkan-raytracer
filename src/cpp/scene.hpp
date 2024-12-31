@@ -2,10 +2,12 @@
 
 #include <yaml-cpp/yaml.h>
 #include <filesystem>
+#include <numeric>
 
 #include "pch.hpp"
 #include "util/buffer-builder.hpp"
 #include "util/gpu-types.hpp"
+#include "bvh.hpp"
 
 struct Material {
     gpu::vec3 baseColor;
@@ -18,19 +20,14 @@ struct Material {
 };
 
 struct Triangle {
-    gpu::vec3 vertices[3]; // these are actually vec3 in the shader
-    gpu::vec3 normals[3];  // but there was no other way to pad them correctly
-};
+    gpu::u32 materialIdx;
+    gpu::boolean isSphere;
+    gpu::vec3 vertices[3];
+    gpu::vec3 normals[3];
 
-struct Sphere {
-    gpu::vec3 center;
-    float radius;
-};
-
-struct Mesh {
-    gpu::u32 triangle_count;
-    gpu::u32 offset;
-    Material material;
+    // todo: these could be cached for much faster BVH building
+    gpu::vec3 minBound() const;
+    gpu::vec3 maxBound() const;
 };
 
 struct CameraControlsUniform {
@@ -40,29 +37,58 @@ struct CameraControlsUniform {
     gpu::f32 focusDistance;
     gpu::f32 apertureRadius;
     gpu::u32 time;
-    gpu::vec4 origin;
+    gpu::vec4 location;
     glm::mat4 rotation;
 };
 
+struct BvhNode; // forward declaration
 
-class Scene {
-    YAML::Node sceneFile;
+struct SceneComponents {
+    CameraControlsUniform camera;
 
-    public:
-        Scene(std::filesystem::path path = "scene.yaml");
-        std::pair<size_t, size_t> getBufferSizes();
-        void populateBuffers(BufferBuilder &meshes, BufferBuilder &triangles);
-
-    private:
-        /* This method performs some very basic validation on the scene file */
-        void validateFile();
-
-        /* These methods handle the population of triangles and spheres respectively */
-        void populateTriMesh(YAML::Node mesh, BufferBuilder &meshes, BufferBuilder &triangles);
-        void populateSphere(YAML::Node mesh, BufferBuilder &meshes, BufferBuilder &triangles);
-
-        /* Returns the Material object from the current material node */
-        Material getMaterial(YAML::Node);
+    std::vector<BvhNode> bvh;
+    std::vector<Material> materials;
+    std::vector<Triangle> triangles;
 };
 
-inline void assertTrue(bool value);
+class Scene {
+    YAML::Node root;
+    SceneComponents components;
+
+public:
+    explicit Scene(std::filesystem::path path = "scene.yaml");
+
+    /* Return the size of the BHV, Material, and Triangle buffers respectively */
+    std::tuple<size_t, size_t, size_t> getBufferSizes();
+
+    /* Return the camera information stored in the config, if any. */
+    CameraControlsUniform getCameraControls();
+
+    /* Write the scene to memory */
+    void writeBuffers(void *memory);
+
+private:
+    /* This method performs some very basic validation on the scene file */
+    void validateFile();
+
+    /* Load the camera controls from the file */
+    void loadCameraControls();
+
+    /* These methods handle the loading of the various meshes and their triangles */
+    void loadMeshes();
+    void loadTriMesh(YAML::Node trimesh);
+    void loadSphere(YAML::Node sphere);
+
+    /* This method builds a BVH for the scene */
+    void buildBVH();
+
+    /* Returns the Material object from the current material node */
+    static Material getMaterial(YAML::Node);
+};
+
+inline void assertTrue(bool value); // used in validation
+
+template<typename T>
+void applyOrdering(std::vector<T> &items, const std::vector<uint>& ordering);
+gpu::vec3 vecMax(gpu::vec3 left, gpu::vec3 right);
+gpu::vec3 vecMin(gpu::vec3 left, gpu::vec3 right);
