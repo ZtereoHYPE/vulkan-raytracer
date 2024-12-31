@@ -24,14 +24,14 @@ float axisMax(Triangle tri, size_t axis) {
 
 float BvhNode::area() {
     // if the node is uninitialized / expanded with 0 trianges thne this yields NaN
-    if (max == MIN_VAL || min == MAX_VAL) return 0;
-    gpu::vec3 len = max - min;
+    if (max_amt.max == MIN_VAL || min_idx.min == MAX_VAL) return 0;
+    gpu::vec3 len = max_amt.max - min_idx.min;
     return 2 * (len[0] * len[1] + len[0] * len[2] + len[1] * len[2]);
 }
 
 void BvhNode::expand(Triangle tri) {
-    min = gpu::min(min, tri.minBound());
-    max = gpu::max(max, tri.maxBound());
+    min_idx.min = gpu::min(min_idx.min, tri.minBound());
+    max_amt.max = gpu::max(max_amt.max, tri.maxBound());
 }
 
 void BvhNode::initialize(std::vector<Triangle> &triangles, std::span<uint> &indices, uint offset) {
@@ -40,9 +40,8 @@ void BvhNode::initialize(std::vector<Triangle> &triangles, std::span<uint> &indi
         expand(triangles[idx]);
 
     // Populate the various fields
-    idx = offset;               // offset into the buffer
-    amt = indices.size();       // size of the remaining items
-    left = 0;                   // indicates that it's a leaf
+    min_idx.idx.idx = offset;           // offset into the buffer
+    max_amt.amt.amt = indices.size();   // amt size => leaf
 }
 
 std::vector<BvhNode> BvhBuilder::buildBvh() {
@@ -97,7 +96,8 @@ void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint 
 
     // Add the children indices and recurse down
     uint leftNodeIdx = bvhList.size();
-    bvhList[nodeIdx].left = leftNodeIdx;
+    bvhList[nodeIdx].min_idx.idx.idx = leftNodeIdx; // child index
+    bvhList[nodeIdx].max_amt.amt.amt = 0;           // not a leaf
 
     BvhNode leftNode{}, rightNode{};
     bvhList.push_back(leftNode);

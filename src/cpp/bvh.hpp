@@ -6,24 +6,30 @@
 #include "util/gpu-types.hpp"
 #include "scene.hpp"
 
-const uint BHV_MAX_DEPTH = 16;
+const uint BHV_MAX_DEPTH = 64;
 const gpu::vec3 MAX_VAL = gpu::vec3(1e30, 1e30, 1e30);
 const gpu::vec3 MIN_VAL = gpu::vec3(-1e30, -1e30, -1e30);
 
 struct Triangle; // forward declaration
 
-// todo: this can be compacted to 2 vec4s (last is amt and idx/left)
+
 struct BvhNode {
-    /* Offset and stride within respective buffer */
-    gpu::u32 idx;
-    gpu::u32 amt;
+    // This layout matches the same compact layout as the shader
+    union {
+        gpu::vec3 min = MAX_VAL;
+        struct {
+            int pad[3];
+            gpu::u32 idx;
+        } idx;
+    } min_idx;
 
-    /* Children indices */
-    gpu::u32 left;
-
-    /* Bounds of the node */
-    gpu::vec3 min = MAX_VAL;
-    gpu::vec3 max = MIN_VAL;
+    union {
+        gpu::vec3 max = MIN_VAL;
+        struct {
+            int pad[3];
+            gpu::u32 amt;
+        } amt;
+    } max_amt;
 
     void initialize(std::vector<Triangle> &triangles, std::span<uint> &indices, uint offset);
     void expand(Triangle tri);

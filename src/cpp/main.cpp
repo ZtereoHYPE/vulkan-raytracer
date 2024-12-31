@@ -1,6 +1,6 @@
 #include "main.hpp"
 
-const int TILE_SIZE = 16;
+const int TILE_SIZE = 8;
 
 class RayTracerProgram {
    public:
