@@ -1,5 +1,6 @@
 build
 VulkanTest
 .vscode
+.idea
 obj-convert/target
 obj-convert/Cargo.lock
