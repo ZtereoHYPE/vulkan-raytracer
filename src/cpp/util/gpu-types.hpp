@@ -49,6 +49,10 @@ struct alignas(8) vector2 {
         return glm::vec<2, T>(values[0], values[1]);
     }
 
+    T operator[](size_t idx) const {
+        return values[idx];
+    }
+
     vector2 operator+(vector2 other) {
         return {values[0] + other.values[0], values[1] + other.values[1]};
     }

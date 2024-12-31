@@ -10,7 +10,7 @@ struct Window {
 
     static std::vector<const char*> getRequiredExtensions();
 
-    Window(const char *title, int initialWidth, int initialHeight);
+    Window(const char *title, uint initialWidth, uint initialHeight);
     Window(const Window &obj) = delete; // do not allow copies of this class
 
     vk::SurfaceKHR createVulkanSurface(vk::Instance const &instance) const;

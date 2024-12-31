@@ -3,6 +3,7 @@
 #include <yaml-cpp/yaml.h>
 #include <filesystem>
 #include <numeric>
+#include <cmath>
 
 #include "pch.hpp"
 #include "util/buffer-builder.hpp"
@@ -31,13 +32,13 @@ struct Triangle {
 };
 
 struct CameraControlsUniform {
-    gpu::vec2 resolution;
+    gpu::uvec2 resolution;
     gpu::vec2 viewportUv;
     gpu::f32 focalLength;
     gpu::f32 focusDistance;
     gpu::f32 apertureRadius;
     gpu::u32 time;
-    gpu::vec4 location;
+    gpu::vec3 location;
     glm::mat4 rotation;
 };
 

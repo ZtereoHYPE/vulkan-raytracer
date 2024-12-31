@@ -48,7 +48,7 @@ gpu::vec3 Triangle::maxBound() const {
  *          radius: 50
  */
 
-const std::string CONFIG_VERSION = "0.1";
+const std::string CONFIG_VERSION = "0.2";
 
 Scene::Scene(std::filesystem::path path)
 :
@@ -61,7 +61,6 @@ Scene::Scene(std::filesystem::path path)
 }
 
 std::tuple<size_t, size_t, size_t> Scene::getBufferSizes() {
-    // todo: perhaps find a more efficient way to calculate them
     BufferBuilder bvhBuf, matBuf, triBuf;
     for (auto node : components.bvh)
         bvhBuf.append(node);
@@ -76,16 +75,7 @@ std::tuple<size_t, size_t, size_t> Scene::getBufferSizes() {
 }
 
 CameraControlsUniform Scene::getCameraControls() {
-    // return components.camera;
-
-    return {
-        .resolution = gpu::vec2(900, 900),
-        .focalLength = 1.0,
-        .focusDistance = 4.8,
-        .apertureRadius = 0.0,
-        .location = gpu::vec4(0, 1, 3, 0),
-        .rotation = rotate(glm::identity<glm::mat4>(), 3.14f, glm::vec3(0, 1, 0)), // glm::identity<glm::mat4>(),
-    };
+    return components.camera;
 }
 
 void Scene::validateFile() {
@@ -115,12 +105,55 @@ void Scene::validateFile() {
             assertTrue(mesh["data"]["radius"].IsScalar());
         }
     }
+
+    // ensure that the camera data exists
+    auto camera = root["camera"];
+    assertTrue(camera["resolution"].IsSequence());
+    assertTrue(camera["focal_length"].IsScalar());
+    assertTrue(camera["focus_distance"].IsScalar());
+    assertTrue(camera["aperture_radius"].IsScalar());
+    assertTrue(camera["location"].IsSequence());
+    assertTrue(camera["rotation"].IsSequence());
+
+    assertTrue(camera["resolution"].size() == 2);
+    assertTrue(camera["location"].size() == 3);
+    assertTrue(camera["rotation"].size() == 3);
 }
 
 void Scene::loadCameraControls() {
-    typedef std::string str;
+    auto camera = root["camera"];
 
-    // todo: load them!
+    // Load constant parameters
+    CameraControlsUniform ubo {
+        .resolution =       camera["resolution"].as<std::array<gpu::u32, 2>>(),
+        .focalLength =      camera["focal_length"].as<gpu::f32>(),
+        .focusDistance =    camera["focus_distance"].as<gpu::f32>(),
+        .apertureRadius =   camera["aperture_radius"].as<gpu::f32>(),
+        .location =         camera["location"].as<std::array<gpu::f32, 3>>(),
+    };
+
+    // Calculate rotation matrix
+    gpu::vec3 rotation = camera["rotation"].as<std::array<gpu::f32, 3>>();
+    glm::mat4 rotMatrix = glm::identity<glm::mat4>();
+
+    rotMatrix = glm::rotate(rotMatrix, (float)(rotation[0] * M_PI / 180.0f), glm::vec3(1,0,0));
+    rotMatrix = glm::rotate(rotMatrix, (float)(rotation[1] * M_PI / 180.0f), glm::vec3(0,1,0));
+    rotMatrix = glm::rotate(rotMatrix, (float)(rotation[2] * M_PI / 180.0f), glm::vec3(0,0,1));
+    ubo.rotation = rotMatrix;
+
+    // Calculate UV
+    float ratio = ubo.resolution[0] / (float) ubo.resolution[1];
+    float u, v;
+    if (ratio > 1) {
+        u = ratio;
+        v = 1;
+    } else {
+        u = 1;
+        v = 1/ratio;
+    }
+    ubo.viewportUv = gpu::vec2(u, v);
+
+    components.camera = ubo;
 }
 
 void Scene::writeBuffers(void *memory) {

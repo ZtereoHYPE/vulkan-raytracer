@@ -11,8 +11,12 @@ class RayTracerProgram {
     }
 
    private:
-    Scene scene{ "scenes/oldScene.yaml" };
-    Window window{ "Vulkan RayTracer", 600, 600 };
+    Scene scene{ "scenes/benchmark.yaml" };
+    Window window{ 
+        "Vulkan RayTracer", 
+        scene.getCameraControls().resolution[0], 
+        scene.getCameraControls().resolution[1] 
+    };
 
     vk::Device device;
     vk::SwapchainKHR swapChain;
@@ -271,20 +275,9 @@ class RayTracerProgram {
 
     void updateUniformBuffer(void* uniformMemoryMap) {
         CameraControlsUniform ubo = scene.getCameraControls();
-
-        float ratio = swapChainExtent.width / (float) swapChainExtent.height;
-        float u, v;
-
-        if (ratio > 1) {
-            u = ratio;
-            v = 1;
-        } else {
-            u = 1;
-            v = 1/ratio;
-        }
-
-        ubo.viewportUv = gpu::vec2(u, v);
         ubo.time = frameCounter;
+        // to support scaled monitors
+        ubo.resolution = gpu::uvec2(swapChainExtent.width, swapChainExtent.height);
 
         // not super efficient as the memory has to be host-visible and writeable
         // if this matters at all, push constants could be a solution

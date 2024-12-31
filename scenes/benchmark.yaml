@@ -1,4 +1,13 @@
-version: '0.1'
+version: '0.2'
+
+camera:
+  resolution: [600, 600]
+  focal_length: 1.0
+  focus_distance: 5
+  aperture_radius: 0
+  location: [0, 1, 3]
+  rotation: [0, 180, 0]
+
 scene:
 - type: TriMesh
   material:
@@ -136,7 +145,7 @@ scene:
     - 0.0
     - 0.0
     - 0.0
-    reflectiveness: 0.8
+    reflectiveness: 1
     roughness: 0
     ior: 1.5
     is_glass: null

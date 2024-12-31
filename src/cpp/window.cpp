@@ -1,11 +1,11 @@
 #include "window.hpp"
 
-Window::Window(const char *title, int initialWidth, int initialHeight) {
+Window::Window(const char *title, uint initialWidth, uint initialHeight) {
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE); // todo: re-enable resizing when cleaned up code
-    auto glfwWindow = glfwCreateWindow(initialWidth, initialHeight, title, nullptr, nullptr);
+    auto glfwWindow = glfwCreateWindow((int)initialWidth, (int)initialHeight, title, nullptr, nullptr);
 
     glfwSetWindowUserPointer(glfwWindow, this);
 
