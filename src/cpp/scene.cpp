@@ -2,7 +2,8 @@
 
 gpu::vec3 Triangle::minBound() const {
     if (isSphere) {
-        return vertices[0] + gpu::vec3(vertices[1][0],vertices[1][0],vertices[1][0]);
+        const float radius = vertices[1][0];
+        return vertices[0] - gpu::vec3(radius, radius, radius);
     } else {
         return gpu::min(gpu::min(vertices[0], vertices[1]), vertices[2]);
     }
@@ -10,7 +11,8 @@ gpu::vec3 Triangle::minBound() const {
 
 gpu::vec3 Triangle::maxBound() const {
     if (isSphere) {
-        return vertices[0] - gpu::vec3(vertices[1][0],vertices[1][0],vertices[1][0]);
+        const float radius = vertices[1][0];
+        return vertices[0] + gpu::vec3(radius, radius, radius);
     } else {
         return gpu::max(gpu::max(vertices[0], vertices[1]), vertices[2]);
     }

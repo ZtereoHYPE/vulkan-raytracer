@@ -60,19 +60,15 @@ std::vector<BvhNode> BvhBuilder::buildBvh() {
 }
 
 /**
-* Builds the thing by perfroming a recursive algorithm!!1
-*
-* Inspired by https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
-*/
+ * Builds the BVH by perfroming a recursive algorithm
+ *
+ * Inspired by https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
+ */
 void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint depth, uint offset, float parentCost) {
     // Initialize the node's data.
     bvhList[nodeIdx].initialize(triangles, indices, offset);
 
     if (depth >= BHV_MAX_DEPTH || indices.size() <= 1) return;
-
-    //printf(" bounds %g %g %g > %g %g %g\n", bvhList[nodeIdx].min[0],bvhList[nodeIdx].min[1],bvhList[nodeIdx].min[2],bvhList[nodeIdx].max[0],bvhList[nodeIdx].max[1],bvhList[nodeIdx].max[2]);
-
-    //std::cout << "idx amt: " << indices.size() << "\n";
 
     auto [splitAxis, splitPos] = findBestSplit(indices);
     float bestCost = splitCost(indices, splitAxis, splitPos);
@@ -94,8 +90,12 @@ void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint 
         }
     }
 
+    // Avoid creating empty nodes
+    if ((leftIdx == 0) || (rightIdx == indices.size() - 1)) return;
+
     // Add the children indices and recurse down
     uint leftNodeIdx = bvhList.size();
+
     bvhList[nodeIdx].min_idx.idx.idx = leftNodeIdx; // child index
     bvhList[nodeIdx].max_amt.amt.amt = 0;           // not a leaf
 
@@ -118,8 +118,6 @@ std::tuple<size_t, float> BvhBuilder::findBestSplit(std::span<uint> &indices) {
             float center = (axisMin(tri, axis) + axisMax(tri, axis)) / 2;
             float cost = splitCost(indices, axis, center);
 
-            //std::cout << "cost/axis/pos: " << cost << "/" << axis << "/" << center << "\n";
-
             if (cost < bestCost) {
                 bestCost = cost;
                 splitAxis = axis;
@@ -130,12 +128,6 @@ std::tuple<size_t, float> BvhBuilder::findBestSplit(std::span<uint> &indices) {
 
     if (splitAxis == -1)
         throw std::runtime_error("the axys has not been set");
-
-    // Partition all the objects based on whether they are closer to left or right
-    //gpu::vec3 boundSizes = node.max - node.min;
-    //size_t splitAxis = std::distance(boundSizes.values.begin(), std::max_element(boundSizes.values.begin(), boundSizes.values.end())); 
-    //float splitPos = (node.max.values[splitAxis] + node.min.values[splitAxis]) / 2.0;
-    //float bestCost = parentCost/2;
 
     return std::make_tuple(splitAxis, splitPos);
 }

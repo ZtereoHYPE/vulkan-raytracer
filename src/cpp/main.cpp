@@ -11,7 +11,7 @@ class RayTracerProgram {
     }
 
    private:
-    Scene scene{ "scenes/benchmark.yaml" };
+    Scene scene{ "scenes/spheres.yaml" };
     Window window{ 
         "Vulkan RayTracer", 
         scene.getCameraControls().resolution[0], 
