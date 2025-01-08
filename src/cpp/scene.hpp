@@ -18,6 +18,7 @@ struct Material {
     gpu::f32 ior;
     gpu::boolean isGlass;
     gpu::boolean shadeSmooth;
+    gpu::vec3 motionBlur;
 };
 
 struct Triangle {

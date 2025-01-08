@@ -1,0 +1,55 @@
+version: '0.2'
+
+camera:
+  resolution: [800, 600]
+  focal_length: 1.0
+  focus_distance: 4.8
+  aperture_radius: 0
+  location: [0, 0, 0]
+  rotation: [0, 0, 0]
+
+scene:
+# ground
+- type: Sphere
+  material:
+    base_color: [0.5, 0.5, 0.5]
+  data:
+    radius: 99
+    center: [0, -100, 0]
+
+# sun
+- type: Sphere
+  material:
+    base_color: [1, 0.99, 0.9]
+    emission: [15, 15, 15]
+  data:
+    radius: 200
+    center: [-500, 200, 700]
+
+# various balls
+- type: Sphere
+  material:
+    base_color: [0.9, 0.1, 0.1]
+    reflectiveness: 1
+    roughness: 0.003
+    motion_blur: [0, 0, 5]
+  data:
+    radius: 1.5
+    center: [3, 0.5, 5]
+
+- type: Sphere
+  material:
+    base_color: [1, 1, 1]
+    is_glass: true
+    ior: 1.45
+  data:
+    radius: 1
+    center: [0, 0, 5]
+
+- type: Sphere
+  material:
+    base_color: [0, 0.5, 0.9]
+    motion_blur: [0.14, 0.3, 0.1]
+  data:
+    radius: 0.3
+    center: [-1.6, -0.8, 3.0]

@@ -232,7 +232,7 @@ void Scene::loadSphere(YAML::Node sphere) {
 
 void Scene::buildBVH() {
     std::cout << "building BVH..." << "\n";
-    components.bvh = BvhBuilder(components.triangles).buildBvh();
+    components.bvh = BvhBuilder(components.triangles, components.materials).buildBvh();
     std::cout << "done!" << "\n";
 }
 
@@ -249,6 +249,7 @@ Material Scene::getMaterial(YAML::Node node) {
         .ior =              node["ior"].as<gpu::f32>(0.0),
         .isGlass =          node["is_glass"].as<bool>(false),
         .shadeSmooth =      node["smooth_shading"].as<bool>(false),
+        .motionBlur =       node["motion_blur"].as<std::array<gpu::f32, 3>>(def),
     };
 }
 

@@ -51,6 +51,7 @@ std::vector<BvhNode> BvhBuilder::buildBvh() {
 
     bvhList.push_back(BvhNode());
     buildRecursively(0, std::span(indices), 0, 0, 1e30);
+    applyMotionBlur(0);
 
     // Applies the indices to the triangles. This avoids lots of memory movement
     // while the BVH is being built, and significantly speeds the process up.
@@ -162,6 +163,43 @@ float BvhBuilder::splitCost(std::span<uint> &indices, size_t axis, float locatio
     }
 
     return leftAmount * nodeLeft.area() + rightAmount * nodeRight.area();
+}
+
+/**
+ * Recursively stretches the boundaries of bounding boxes to adapt for motion blur.
+ * 
+ * Unfortunately, this makes the BVH significantly less efficient for large
+ * motion blur values, as the aabb effectively needs to contain the whole motion.
+ */
+void BvhBuilder::applyMotionBlur(size_t nodeIdx) {
+    BvhNode &node = bvhList[nodeIdx];
+
+    if (node.max_amt.amt.amt != 0) {
+        // if it's a leaf, then recalculate bounding box based on motion blur vector
+        size_t offset = node.min_idx.idx.idx;
+        size_t amount = node.max_amt.amt.amt;
+
+        gpu::vec3 motionBlur = materials[triangles[offset].materialIdx].motionBlur;
+
+        for (size_t idx = offset; idx < amount + offset; ++idx) {
+            Triangle tri = triangles[idx];
+
+            // the rays are distributed from 0 * motionBlur to 1 * motionBlur
+            node.min_idx.min = gpu::min(node.min_idx.min, tri.minBound() + motionBlur);
+            node.max_amt.max = gpu::max(node.max_amt.max, tri.maxBound() + motionBlur);
+        }
+        
+    } else {
+        size_t child = node.min_idx.idx.idx;
+
+        // recurse downwards
+        applyMotionBlur(child + 0);
+        applyMotionBlur(child + 1);
+
+        // adapt the current node's size based in its children
+        node.min_idx.min = gpu::min(node.min_idx.min, bvhList[child + 0].min_idx.min);
+        node.max_amt.max = gpu::max(node.max_amt.max, bvhList[child + 1].min_idx.min);
+    }
 }
 
 void BvhBuilder::applyOrdering(std::vector<Triangle>& items, const std::vector<uint>& indices) {

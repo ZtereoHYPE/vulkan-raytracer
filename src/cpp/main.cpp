@@ -11,7 +11,7 @@ class RayTracerProgram {
     }
 
    private:
-    Scene scene{ "scenes/spheres.yaml" };
+    Scene scene{ "scenes/spheres_blur.yaml" };
     Window window{ 
         "Vulkan RayTracer", 
         scene.getCameraControls().resolution[0], 
@@ -142,7 +142,7 @@ class RayTracerProgram {
         auto currentTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastFrame);
 
-        std::cout << "ms: " << duration.count() << std::endl;
+        std::cout << "\x1B[2K\r" << "ms: " << duration.count() << std::flush;
         lastFrame = currentTime;
 
         /* COMPUTE SUBMISSION */
