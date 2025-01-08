@@ -6,7 +6,18 @@ use tobj::{Material, Model};
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct SceneFile<'a> {
     version: &'a str,
+    camera: Camera,
     scene: Box<Vec<Mesh<'a>>>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct Camera {
+    resolution: [u32; 2],
+    focal_length: f32,
+    focus_distance: f32,
+    aperture_radius: f32,
+    location: [f32; 3],
+    rotation: [f32; 3],
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -62,7 +73,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let scene = SceneFile {
-        version: "0.1",
+        version: "0.2",
+        camera: Camera {
+            resolution: [800, 600],
+            focal_length: 1.0,
+            focus_distance: 5.0,
+            aperture_radius: 0.0,
+            location: [0.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0],
+        },
         scene: Box::new(meshes),
     };
 
