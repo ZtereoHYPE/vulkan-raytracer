@@ -51,11 +51,12 @@ std::vector<BvhNode> BvhBuilder::buildBvh() {
 
     bvhList.push_back(BvhNode());
     buildRecursively(0, std::span(indices), 0, 0, 1e30);
-    applyMotionBlur(0);
 
     // Applies the indices to the triangles. This avoids lots of memory movement
     // while the BVH is being built, and significantly speeds the process up.
     applyOrdering(triangles, indices);
+    
+    applyMotionBlur(0);
 
     return bvhList;
 }
@@ -177,11 +178,12 @@ void BvhBuilder::applyMotionBlur(size_t nodeIdx) {
     if (node.max_amt.amt.amt != 0) {
         // if it's a leaf, then recalculate bounding box based on motion blur vector
         size_t offset = node.min_idx.idx.idx;
+        size_t amount = node.max_amt.amt.amt;
 
         // get the mesh material from the first triangle
         gpu::vec3 motionBlur = materials[triangles[offset].materialIdx].motionBlur;
 
-        // the rays are distributed from 0 * motionBlur to 1 * motionBlur
+        // the objects are offset from 0 * motionBlur to 1 * motionBlur
         node.min_idx.min = gpu::min(node.min_idx.min, node.min_idx.min + motionBlur);
         node.max_amt.max = gpu::max(node.max_amt.max, node.max_amt.max + motionBlur);
         
