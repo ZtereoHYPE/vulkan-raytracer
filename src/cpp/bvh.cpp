@@ -177,17 +177,13 @@ void BvhBuilder::applyMotionBlur(size_t nodeIdx) {
     if (node.max_amt.amt.amt != 0) {
         // if it's a leaf, then recalculate bounding box based on motion blur vector
         size_t offset = node.min_idx.idx.idx;
-        size_t amount = node.max_amt.amt.amt;
 
+        // get the mesh material from the first triangle
         gpu::vec3 motionBlur = materials[triangles[offset].materialIdx].motionBlur;
 
-        for (size_t idx = offset; idx < amount + offset; ++idx) {
-            Triangle tri = triangles[idx];
-
-            // the rays are distributed from 0 * motionBlur to 1 * motionBlur
-            node.min_idx.min = gpu::min(node.min_idx.min, tri.minBound() + motionBlur);
-            node.max_amt.max = gpu::max(node.max_amt.max, tri.maxBound() + motionBlur);
-        }
+        // the rays are distributed from 0 * motionBlur to 1 * motionBlur
+        node.min_idx.min = gpu::min(node.min_idx.min, node.min_idx.min + motionBlur);
+        node.max_amt.max = gpu::max(node.max_amt.max, node.max_amt.max + motionBlur);
         
     } else {
         size_t child = node.min_idx.idx.idx;
@@ -198,7 +194,9 @@ void BvhBuilder::applyMotionBlur(size_t nodeIdx) {
 
         // adapt the current node's size based in its children
         node.min_idx.min = gpu::min(node.min_idx.min, bvhList[child + 0].min_idx.min);
-        node.max_amt.max = gpu::max(node.max_amt.max, bvhList[child + 1].min_idx.min);
+        node.max_amt.max = gpu::max(node.max_amt.max, bvhList[child + 0].max_amt.max);
+        node.min_idx.min = gpu::min(node.min_idx.min, bvhList[child + 1].min_idx.min);
+        node.max_amt.max = gpu::max(node.max_amt.max, bvhList[child + 1].max_amt.max);
     }
 }
 
