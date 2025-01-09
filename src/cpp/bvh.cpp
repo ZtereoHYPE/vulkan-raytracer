@@ -72,7 +72,7 @@ void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint 
 
     if (depth >= BHV_MAX_DEPTH || indices.size() <= 1) return;
 
-    auto [splitAxis, splitPos] = findBestSplit(indices);
+    auto [splitAxis, splitPos] = findBestSplit(nodeIdx, indices);
     float bestCost = splitCost(indices, splitAxis, splitPos);
 
     // If we aren't improving over the parent, return.
@@ -109,29 +109,53 @@ void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint 
     buildRecursively(leftNodeIdx + 1, indices.subspan(leftIdx, indices.size() - leftIdx), depth + 1, offset + leftIdx, bestCost);
 }
 
-std::tuple<size_t, float> BvhBuilder::findBestSplit(std::span<uint> &indices) {
-    // Use the SAH to find the best split position by trying to split at every single center
-    size_t splitAxis = -1;
-    float splitPos;
+/*
+ * Finds the best location and axis to perform a split by attempting to split the
+ * volume SPLIT_ATTEMPTS times.
+ */
+std::tuple<size_t, float> BvhBuilder::findBestSplit(uint nodeIdx, std::span<uint> &indices) {
+    // Get the node's AABB information
+    BvhNode node = bvhList[nodeIdx];
+    gpu::vec3 startPos = node.min_idx.min;
+    gpu::vec3 dimentions = (node.max_amt.max - node.min_idx.min) / (SPLIT_ATTEMPTS + 1);
+
+    // Use the SAH to find the best split position by trying to split at SPLIT_ATTEMPT uniform intervals
+    size_t bestAxis = -1;
+    float bestPos;
     float bestCost = 1e30;
     for (size_t axis : {0, 1, 2}) {
-        for (uint triIdx : indices) {
-            Triangle tri = triangles[triIdx];
-            float center = (axisMin(tri, axis) + axisMax(tri, axis)) / 2;
-            float cost = splitCost(indices, axis, center);
+        if (SPLIT_ATTEMPTS == -1) {
+            // Try at every possible position
+            for (uint triIdx : indices) {
+                Triangle tri = triangles[triIdx];
+                float pos = (axisMin(tri, axis) + axisMax(tri, axis)) / 2;
+                float cost = splitCost(indices, axis, pos);
 
-            if (cost < bestCost) {
-                bestCost = cost;
-                splitAxis = axis;
-                splitPos = center;
+                if (cost < bestCost) {
+                    bestAxis = axis;
+                    bestPos = pos;
+                    bestCost = cost;
+                }
+            }
+        } else {
+            // Try SPLIT_ATTEMPTS splits and pick the best
+            for (uint attempt = 1; attempt <= SPLIT_ATTEMPTS; ++attempt) {
+                float pos = startPos[axis] + dimentions[axis] * attempt;
+                float cost = splitCost(indices, axis, pos);
+
+                if (cost < bestCost) {
+                    bestAxis = axis;
+                    bestPos = pos;
+                    bestCost = cost;
+                }
             }
         }
     }
 
-    if (splitAxis == -1)
-        throw std::runtime_error("the axys has not been set");
+    if (bestAxis == -1)
+        throw std::runtime_error("No good split was found! This should never happen.");
 
-    return std::make_tuple(splitAxis, splitPos);
+    return std::make_tuple(bestAxis, bestPos);
 }
 
 /*
@@ -171,6 +195,8 @@ float BvhBuilder::splitCost(std::span<uint> &indices, size_t axis, float locatio
  * 
  * Unfortunately, this makes the BVH significantly less efficient for large
  * motion blur values, as the aabb effectively needs to contain the whole motion.
+ * 
+ * This is done as a separate step to keep the main BVH construction algorithm simple.
  */
 void BvhBuilder::applyMotionBlur(size_t nodeIdx) {
     BvhNode &node = bvhList[nodeIdx];
@@ -178,7 +204,6 @@ void BvhBuilder::applyMotionBlur(size_t nodeIdx) {
     if (node.max_amt.amt.amt != 0) {
         // if it's a leaf, then recalculate bounding box based on motion blur vector
         size_t offset = node.min_idx.idx.idx;
-        size_t amount = node.max_amt.amt.amt;
 
         // get the mesh material from the first triangle
         gpu::vec3 motionBlur = materials[triangles[offset].materialIdx].motionBlur;

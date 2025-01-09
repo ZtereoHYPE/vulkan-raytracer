@@ -7,6 +7,7 @@
 #include "scene.hpp"
 
 const uint BHV_MAX_DEPTH = 64;
+const int SPLIT_ATTEMPTS = 8; // set to -1 for trying at every possible position
 const gpu::vec3 MAX_VAL = gpu::vec3(1e30, 1e30, 1e30);
 const gpu::vec3 MIN_VAL = gpu::vec3(-1e30, -1e30, -1e30);
 
@@ -50,7 +51,7 @@ public:
 
 private:
     void buildRecursively(size_t nodeIdx, std::span<uint> ordering, uint depth, uint offset, float parentCost);
-    std::tuple<size_t, float> findBestSplit(std::span<uint> &indices);
+    std::tuple<size_t, float> findBestSplit(uint nodeIdx, std::span<uint> &indices);
     float splitCost(std::span<uint> &indices, size_t axis, float location);
     void applyMotionBlur(size_t nodeIdx);
     
