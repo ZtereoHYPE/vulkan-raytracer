@@ -50,7 +50,7 @@ std::vector<const char*> Window::getRequiredExtensions() {
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&count);
 
-    std::vector<const char*> extensions(glfwExtensions, glfwExtensions + count);
+    std::vector extensions(glfwExtensions, glfwExtensions + count);
 
     return extensions;
 }

@@ -1,6 +1,10 @@
 #pragma once
 
-#include "../pch.hpp"
+#include <iostream>
+#include <set>
+#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
+#include <vulkan/vulkan.hpp>
+
 #include "../util/util.hpp"
 #include "../window.hpp"
 

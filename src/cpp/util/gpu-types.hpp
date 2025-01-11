@@ -1,6 +1,7 @@
 #pragma once
 
-#include "../pch.hpp"
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
 
 /*
     This is a generic, N-agnostic implementation of the below classes.

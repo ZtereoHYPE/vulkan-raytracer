@@ -3,12 +3,13 @@
 #include <functional>
 #include <sys/time.h>
 #include <chrono>
+#include <iostream>
 
-#include "pch.hpp"
 #include "window.hpp"
+#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 #include "vulkan/vulkan.hpp"
 #include "util/util.hpp"
 #include "util/buffer-builder.hpp"
 #include "util/gpu-types.hpp"
-#include "scene.hpp"
+#include "config/scene.hpp"
 

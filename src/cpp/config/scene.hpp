@@ -3,12 +3,13 @@
 #include <yaml-cpp/yaml.h>
 #include <filesystem>
 #include <numeric>
+#include <iostream>
 #include <cmath>
+#include <glm/gtc/matrix_transform.hpp>
 
-#include "pch.hpp"
-#include "util/buffer-builder.hpp"
-#include "util/gpu-types.hpp"
-#include "bvh.hpp"
+#include "../util/buffer-builder.hpp"
+#include "../util/gpu-types.hpp"
+#include "../bvh.hpp"
 
 struct Material {
     gpu::vec3 baseColor;

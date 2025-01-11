@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../pch.hpp"
+#include <cstdlib>
+#include <cstring>
 
 class BufferBuilder {
-   private:
     void *tmpBuffer;
     size_t currentSize;
     size_t currentOffset;
@@ -49,7 +49,6 @@ class BufferBuilder {
     size_t getOffset();
 
     void pad(size_t amt);
-
 
     void write(void *memory);
 

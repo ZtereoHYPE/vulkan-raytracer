@@ -2,9 +2,8 @@
 
 #include <span>
 
-#include "pch.hpp"
 #include "util/gpu-types.hpp"
-#include "scene.hpp"
+#include "config/scene.hpp"
 
 const uint BHV_MAX_DEPTH = 64;
 const int SPLIT_ATTEMPTS = 8; // set to -1 for trying at every possible position

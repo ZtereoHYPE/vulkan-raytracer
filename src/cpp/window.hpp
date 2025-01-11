@@ -1,8 +1,8 @@
 #pragma once
 
-#include "pch.hpp"
+#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
+#include <vulkan/vulkan.hpp>
 #include <GLFW/glfw3.h>
-#include <vulkan/vulkan_raii.hpp>
 
 
 struct Window {
