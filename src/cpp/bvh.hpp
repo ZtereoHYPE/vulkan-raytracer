@@ -2,13 +2,13 @@
 
 #include <span>
 
-#include "util/gpu-types.hpp"
 #include "config/scene.hpp"
+#include "util/util.hpp"
 
 const uint BHV_MAX_DEPTH = 64;
 const int SPLIT_ATTEMPTS = 8; // set to -1 for trying at every possible position
-const gpu::vec3 MAX_VAL = gpu::vec3(1e30, 1e30, 1e30);
-const gpu::vec3 MIN_VAL = gpu::vec3(-1e30, -1e30, -1e30);
+const glm::vec3 MAX_VAL = glm::vec3(1e30, 1e30, 1e30);
+const glm::vec3 MIN_VAL = glm::vec3(-1e30, -1e30, -1e30);
 
 // forward declarations
 struct Triangle; 
@@ -16,21 +16,10 @@ struct Material;
 
 struct BvhNode {
     // This layout matches the same compact layout as the shader
-    union {
-        gpu::vec3 min = MAX_VAL;
-        struct {
-            int pad[3];
-            gpu::u32 idx;
-        } idx;
-    } min_idx;
-
-    union {
-        gpu::vec3 max = MIN_VAL;
-        struct {
-            int pad[3];
-            gpu::u32 amt;
-        } amt;
-    } max_amt;
+    glm::vec3 min = MAX_VAL;
+    uint idx;
+    glm::vec3 max = MIN_VAL;
+    uint amt;
 
     void initialize(std::vector<Triangle> &triangles, std::span<uint> &indices, uint offset);
     void expand(Triangle tri);

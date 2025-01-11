@@ -11,7 +11,7 @@ class RayTracerProgram {
     }
 
    private:
-    Scene scene{ "scenes/spheres_blur.yaml" };
+    Scene scene{ "scenes/utah.yaml" };
     Window window{ 
         "Vulkan RayTracer", 
         scene.getCameraControls().resolution[0], 
@@ -345,7 +345,7 @@ class RayTracerProgram {
         CameraControlsUniform ubo = scene.getCameraControls();
         ubo.time = frameCounter;
         // to support scaled monitors
-        ubo.resolution = gpu::uvec2(swapChainExtent.width, swapChainExtent.height);
+        ubo.resolution = glm::uvec2(swapChainExtent.width, swapChainExtent.height);
 
         // not super efficient as the memory has to be host-visible and writeable
         // if this matters at all, push constants could be a solution

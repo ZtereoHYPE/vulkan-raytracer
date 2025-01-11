@@ -1,20 +1,20 @@
 #include "scene.hpp"
 
-gpu::vec3 Triangle::minBound() const {
+glm::vec3 Triangle::minBound() const {
     if (isSphere) {
         const float radius = vertices[1][0];
-        return vertices[0] - gpu::vec3(radius, radius, radius);
+        return vertices[0] - glm::vec4(radius, radius, radius, 0);
     } else {
-        return gpu::min(gpu::min(vertices[0], vertices[1]), vertices[2]);
+        return glm::min(glm::min(vertices[0], vertices[1]), vertices[2]);
     }
 }
 
-gpu::vec3 Triangle::maxBound() const {
+glm::vec3 Triangle::maxBound() const {
     if (isSphere) {
         const float radius = vertices[1][0];
-        return vertices[0] + gpu::vec3(radius, radius, radius);
+        return vertices[0] + glm::vec4(radius, radius, radius, 0);
     } else {
-        return gpu::max(gpu::max(vertices[0], vertices[1]), vertices[2]);
+        return glm::max(glm::max(vertices[0], vertices[1]), vertices[2]);
     }
     
 }
@@ -83,6 +83,8 @@ CameraControlsUniform Scene::getCameraControls() {
 void Scene::validateFile() {
     typedef std::string str;
 
+    sizeof(Material);
+
     // check the version is correct
     if (root["version"].as<str>() != CONFIG_VERSION) {
         throw std::runtime_error("Scene file is of incompatible version!");
@@ -127,15 +129,15 @@ void Scene::loadCameraControls() {
 
     // Load constant parameters
     CameraControlsUniform ubo {
-        .resolution =       camera["resolution"].as<std::array<gpu::u32, 2>>(),
-        .focalLength =      camera["focal_length"].as<gpu::f32>(),
-        .focusDistance =    camera["focus_distance"].as<gpu::f32>(),
-        .apertureRadius =   camera["aperture_radius"].as<gpu::f32>(),
-        .location =         camera["location"].as<std::array<gpu::f32, 3>>(),
+        .resolution = toVec(camera["resolution"].as<std::array<uint, 2>>()),
+        .focalLength =      camera["focal_length"].as<float>(),
+        .focusDistance =    camera["focus_distance"].as<float>(),
+        .apertureRadius =   camera["aperture_radius"].as<float>(),
+        .location =   toVec(camera["location"].as<std::array<float, 3>>()),
     };
 
     // Calculate rotation matrix
-    gpu::vec3 rotation = camera["rotation"].as<std::array<gpu::f32, 3>>();
+    glm::vec3 rotation = toVec(camera["rotation"].as<std::array<float, 3>>());
     glm::mat4 rotMatrix = glm::identity<glm::mat4>();
 
     rotMatrix = glm::rotate(rotMatrix, (float)(rotation[0] * M_PI / 180.0f), glm::vec3(1,0,0));
@@ -153,7 +155,7 @@ void Scene::loadCameraControls() {
         u = 1;
         v = 1/ratio;
     }
-    ubo.viewportUv = gpu::vec2(u, v);
+    ubo.viewportUv = glm::vec2(u, v);
 
     components.camera = ubo;
 }
@@ -198,15 +200,14 @@ void Scene::loadTriMesh(YAML::Node mesh) {
 
     // append the triangles
     for (size_t i = 0; i < triangleAmt; ++i) {
-        Triangle tri{
+        Triangle tri {
             .materialIdx = materialIdx,
-            .isSphere = false
+            .isSphere = false,
         };
-
         for (size_t j = 0; j < 3; j++) {
             size_t off = i * 9 + j * 3;
-            tri.vertices[j] = gpu::vec3(verts[off], verts[off+1], verts[off+2]);
-            tri.normals[j] = gpu::vec3(norms[off], norms[off+1], norms[off+2]);
+            tri.vertices[j] = glm::vec4(verts[off], verts[off+1], verts[off+2], 0);
+            tri.normals[j] = glm::vec4(norms[off], norms[off+1], norms[off+2], 0);
         }
 
         components.triangles.push_back(tri);
@@ -218,11 +219,11 @@ void Scene::loadSphere(YAML::Node sphere) {
     uint materialIdx = components.materials.size();
     components.materials.push_back(getMaterial(sphere["material"]));
 
-    auto center = sphere["data"]["center"].as<std::vector<gpu::f32>>();
+    auto center = sphere["data"]["center"].as<std::vector<float>>();
 
     Triangle tri{};
-    tri.vertices[0] = gpu::vec3(center[0], center[1], center[2]);
-    tri.vertices[1] = gpu::vec3(sphere["data"]["radius"].as<float>(), 0, 0);
+    tri.vertices[0] = glm::vec4(center[0], center[1], center[2], 0);
+    tri.vertices[1] = glm::vec4(sphere["data"]["radius"].as<float>(), 0, 0, 0);
     tri.materialIdx = materialIdx;
     tri.isSphere = true;
 
@@ -242,14 +243,14 @@ Material Scene::getMaterial(YAML::Node node) {
 
     // return the material, with all values defaulting to 0 / false if missing
     return {
-        .baseColor =        node["base_color"].as<std::array<gpu::f32, 3>>(def),
-        .emission =         node["emission"].as<std::array<gpu::f32, 3>>(def),
-        .reflectiveness =   node["reflectiveness"].as<gpu::f32>(0.0),
-        .roughness =        node["roughness"].as<gpu::f32>(0.0),
-        .ior =              node["ior"].as<gpu::f32>(0.0),
+        .baseColor =  toVec(node["base_color"].as<std::array<float, 3>>(def)),
+        .emission =   toVec(node["emission"].as<std::array<float, 3>>(def)),
+        .reflectiveness =   node["reflectiveness"].as<float>(0.0),
+        .roughness =        node["roughness"].as<float>(0.0),
+        .ior =              node["ior"].as<float>(0.0),
         .isGlass =          node["is_glass"].as<bool>(false),
         .shadeSmooth =      node["smooth_shading"].as<bool>(false),
-        .motionBlur =       node["motion_blur"].as<std::array<gpu::f32, 3>>(def),
+        .motionBlur = toVec(node["motion_blur"].as<std::array<float, 3>>(def)),
     };
 }
 

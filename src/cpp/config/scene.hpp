@@ -5,43 +5,43 @@
 #include <numeric>
 #include <iostream>
 #include <cmath>
+#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "../util/buffer-builder.hpp"
-#include "../util/gpu-types.hpp"
 #include "../bvh.hpp"
+#include "../util/util.hpp"
 
 struct Material {
-    gpu::vec3 baseColor;
-    gpu::vec3 emission;
-    gpu::f32 reflectiveness;
-    gpu::f32 roughness;
-    gpu::f32 ior;
-    gpu::boolean isGlass;
-    gpu::boolean shadeSmooth;
-    gpu::vec3 motionBlur;
+    alignas(16) glm::vec3 baseColor;
+    alignas(16) glm::vec3 emission;
+    float reflectiveness;
+    float roughness;
+    float ior;
+    uint isGlass; // bool
+    uint shadeSmooth; // bool
+    alignas(16) glm::vec3 motionBlur;
 };
 
 struct Triangle {
-    gpu::u32 materialIdx;
-    gpu::boolean isSphere;
-    gpu::vec3 vertices[3];
-    gpu::vec3 normals[3];
+    alignas(16) glm::vec4 vertices[3];
+    alignas(16) glm::vec4 normals[3];
+    uint materialIdx;
+    uint isSphere;
 
-    // todo: these could be cached for much faster BVH building
-    gpu::vec3 minBound() const;
-    gpu::vec3 maxBound() const;
+    glm::vec3 minBound() const;
+    glm::vec3 maxBound() const;
 };
 
 struct CameraControlsUniform {
-    gpu::uvec2 resolution;
-    gpu::vec2 viewportUv;
-    gpu::f32 focalLength;
-    gpu::f32 focusDistance;
-    gpu::f32 apertureRadius;
-    gpu::u32 time;
-    gpu::vec3 location;
-    glm::mat4 rotation;
+    glm::uvec2 resolution;
+    glm::vec2 viewportUv;
+    float focalLength;
+    float focusDistance;
+    float apertureRadius;
+    uint time;
+    alignas(16) glm::vec3 location;
+    alignas(16) glm::mat4 rotation;
 };
 
 struct BvhNode; // forward declaration
@@ -58,7 +58,7 @@ class Scene {
     YAML::Node root;
     SceneComponents components;
 
-public:
+   public:
     explicit Scene(std::filesystem::path path = "scene.yaml");
 
     /* Return the size of the BHV, Material, and Triangle buffers respectively */
@@ -70,7 +70,7 @@ public:
     /* Write the scene to memory */
     void writeBuffers(void *memory);
 
-private:
+   private:
     /* This method performs some very basic validation on the scene file */
     void validateFile();
 
@@ -90,8 +90,3 @@ private:
 };
 
 inline void assertTrue(bool value); // used in validation
-
-template<typename T>
-void applyOrdering(std::vector<T> &items, const std::vector<uint>& ordering);
-gpu::vec3 vecMax(gpu::vec3 left, gpu::vec3 right);
-gpu::vec3 vecMin(gpu::vec3 left, gpu::vec3 right);

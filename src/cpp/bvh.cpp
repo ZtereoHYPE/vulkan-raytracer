@@ -24,14 +24,14 @@ float axisMax(Triangle tri, size_t axis) {
 
 float BvhNode::area() {
     // if the node is uninitialized / expanded with 0 trianges thne this yields NaN
-    if (max_amt.max == MIN_VAL || min_idx.min == MAX_VAL) return 0;
-    gpu::vec3 len = max_amt.max - min_idx.min;
+    if (max == MIN_VAL || min == MAX_VAL) return 0;
+    glm::vec3 len = max - min;
     return 2 * (len[0] * len[1] + len[0] * len[2] + len[1] * len[2]);
 }
 
 void BvhNode::expand(Triangle tri) {
-    min_idx.min = gpu::min(min_idx.min, tri.minBound());
-    max_amt.max = gpu::max(max_amt.max, tri.maxBound());
+    min = glm::min(min, tri.minBound());
+    max = glm::max(max, tri.maxBound());
 }
 
 void BvhNode::initialize(std::vector<Triangle> &triangles, std::span<uint> &indices, uint offset) {
@@ -40,8 +40,8 @@ void BvhNode::initialize(std::vector<Triangle> &triangles, std::span<uint> &indi
         expand(triangles[idx]);
 
     // Populate the various fields
-    min_idx.idx.idx = offset;           // offset into the buffer
-    max_amt.amt.amt = indices.size();   // amt size => leaf
+    idx = offset;           // offset into the buffer
+    amt = indices.size();   // amt size => leaf
 }
 
 std::vector<BvhNode> BvhBuilder::buildBvh() {
@@ -98,8 +98,8 @@ void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint 
     // Add the children indices and recurse down
     uint leftNodeIdx = bvhList.size();
 
-    bvhList[nodeIdx].min_idx.idx.idx = leftNodeIdx; // child index
-    bvhList[nodeIdx].max_amt.amt.amt = 0;           // not a leaf
+    bvhList[nodeIdx].idx = leftNodeIdx; // child index
+    bvhList[nodeIdx].amt = 0;           // not a leaf
 
     BvhNode leftNode{}, rightNode{};
     bvhList.push_back(leftNode);
@@ -116,8 +116,8 @@ void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint 
 std::tuple<size_t, float> BvhBuilder::findBestSplit(uint nodeIdx, std::span<uint> &indices) {
     // Get the node's AABB information
     BvhNode node = bvhList[nodeIdx];
-    gpu::vec3 startPos = node.min_idx.min;
-    gpu::vec3 dimentions = (node.max_amt.max - node.min_idx.min) / (SPLIT_ATTEMPTS + 1);
+    glm::vec3 startPos = node.min;
+    glm::vec3 dimentions = (node.max - node.min) / (SPLIT_ATTEMPTS + 1);
 
     // Use the SAH to find the best split position by trying to split at SPLIT_ATTEMPT uniform intervals
     size_t bestAxis = -1;
@@ -201,29 +201,29 @@ float BvhBuilder::splitCost(std::span<uint> &indices, size_t axis, float locatio
 void BvhBuilder::applyMotionBlur(size_t nodeIdx) {
     BvhNode &node = bvhList[nodeIdx];
 
-    if (node.max_amt.amt.amt != 0) {
+    if (node.amt != 0) {
         // if it's a leaf, then recalculate bounding box based on motion blur vector
-        size_t offset = node.min_idx.idx.idx;
+        size_t offset = node.idx;
 
         // get the mesh material from the first triangle
-        gpu::vec3 motionBlur = materials[triangles[offset].materialIdx].motionBlur;
+        glm::vec3 motionBlur = materials[triangles[offset].materialIdx].motionBlur;
 
         // the objects are offset from 0 * motionBlur to 1 * motionBlur
-        node.min_idx.min = gpu::min(node.min_idx.min, node.min_idx.min + motionBlur);
-        node.max_amt.max = gpu::max(node.max_amt.max, node.max_amt.max + motionBlur);
+        node.min = min(node.min, node.min + motionBlur);
+        node.max = max(node.max, node.max + motionBlur);
         
     } else {
-        size_t child = node.min_idx.idx.idx;
+        size_t child = node.idx;
 
         // recurse downwards
         applyMotionBlur(child + 0);
         applyMotionBlur(child + 1);
 
         // adapt the current node's size based in its children
-        node.min_idx.min = gpu::min(node.min_idx.min, bvhList[child + 0].min_idx.min);
-        node.max_amt.max = gpu::max(node.max_amt.max, bvhList[child + 0].max_amt.max);
-        node.min_idx.min = gpu::min(node.min_idx.min, bvhList[child + 1].min_idx.min);
-        node.max_amt.max = gpu::max(node.max_amt.max, bvhList[child + 1].max_amt.max);
+        node.min = min(node.min, bvhList[child + 0].min);
+        node.max = max(node.max, bvhList[child + 0].max);
+        node.min = min(node.min, bvhList[child + 1].min);
+        node.max = max(node.max, bvhList[child + 1].max);
     }
 }
 

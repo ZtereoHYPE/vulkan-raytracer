@@ -32,14 +32,14 @@ struct BvhNode {
  * shaded_smooth        only valid for triangle meshes, determines whether normals are interpolated;
  */
 struct Material {
-    vec4 base_color;
-    vec4 emission;
+    vec3 base_color;
+    vec3 emission;
     float reflectivity;
     float roughness;
     float ior;
     bool is_glass;
     bool shaded_smooth;
-    vec4 motion_blur;
+    vec3 motion_blur;
 };
 
 // perf: these triangles are pretty huge.
@@ -47,10 +47,10 @@ struct Material {
 // store 2 triangle per triangle...
 // Or maybe just remove the normals altogether
 struct Triangle {
-    uint material_idx;
-    bool is_sphere;
     vec3[3] vertices;
     vec3[3] normals;
+    uint material_idx;
+    bool is_sphere;
 };
 
 /* Record of a ray intersection.
