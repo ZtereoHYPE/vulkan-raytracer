@@ -1,0 +1,270 @@
+#version 460
+
+
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_scalar_block_layout : enable
+
+#include "util/parameters.comp"
+#include "util/structures.comp"
+#include "util/random.comp"
+
+// todo: experiment with different kernel sizes for different stages
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(std430, set = 0, binding = 0) uniform Camera {
+    uvec2 resolution;
+    vec2 uv;
+    float focal_len;
+    float focus_distance;
+    float aperture_radius;
+    uint frame;
+    vec4 origin;
+    mat4 rotation;
+} camera;
+
+layout(std430, set = 0, binding = 1) readonly buffer BvhBuffer {
+    BvhNode nodes[];
+} bvh;
+
+layout(std430, set = 0, binding = 2) readonly buffer MaterialBuffer {
+    Material get[]; // this makes the syntax a bit more readable: materials.get[3]
+} materials;
+
+layout(std430, set = 0, binding = 3) readonly buffer TriangleBuffer {
+    Triangle get[];
+} triangles;
+
+layout(std430, set = 0, binding = 4) readonly buffer RayBuffer {
+    Ray rays[];
+} raybuffer;
+
+layout(std430, set = 0, binding = 5) writeonly buffer HitBuffer {
+    HitRecord records[];
+} hitbuffer;
+
+vec3 ray_at(Ray ray, float t) {
+    return ray.origin + (ray.direction * t);
+}
+
+// Möller-Trumbore intersection algorithm (https://www.graphics.cornell.edu/pubs/1997/MT97.pdf)
+HitRecord hit_triangle(Triangle triangle, Ray ray, bool interpolate_normals) {
+    /* This algorithm uses barycentric coordinates to determine whether the intersection falls within
+     * the triangle.
+     *
+     * O = ray.origin; D = ray.dir; A, B, C = triangle points; u, v, w = barycentric coords.
+     * Check where they intersect by equating the coords to the ray function:
+     *      O + t*D = w*A + u*B + v*C
+     *      O + t*D = (1-u-v)*A + u*B + v*C
+     *      -t*D + u*(B - A) + v*(C - A) = O - A
+     *
+     * That is a linear equation with the following form:
+     * (uppercase is vector, represent a column)
+     *      |             |   | t |   |     |
+     *      | D, B-A, C-A | * | u | = | O-A |
+     *      |             |   | v |   |     |
+     *            (M        *  tuv  =   OA)
+     *
+     * To solve the equation, cramer's rule is used:
+     *      t = det(M with OA replacing 1st col) / det(M)
+     *      u = det(M with OA replacing 2nd col) / det(M)
+     *      v = det(M with OA replacing 3rd col) / det(M)
+     *
+     * Finally, the determinants are calculated using the scalar triple product:
+     *      det(M) = (D × C-A) ⋅ B-A = dot(cross(D, C-A), B-A)
+     */
+    HitRecord hit;
+    hit.did_hit = false;
+
+    // Get the normal vector of the plane the triangle lays on.
+    // This is done by performing a cross product between two of the sides of the triangle.
+    vec3 ab = triangle.vertices[1] - triangle.vertices[0];
+    vec3 ac = triangle.vertices[2] - triangle.vertices[0];
+    vec3 plane_normal = normalize(cross(ab, ac));
+
+    // Check if the ray is parallel to the plane, in which case no hit can happen
+    if (abs(dot(plane_normal, ray.direction)) < EPSILON) return hit;
+
+    // motion blur
+    vec3 blur_offset = materials.get[triangle.material_idx].motion_blur.xyz * ray.time;
+
+    vec3 o = ray.origin - (triangle.vertices[0] + blur_offset);
+    vec3 p = cross(ray.direction, ac);
+    vec3 q = cross(o, ab);
+    float inv_det = 1 / dot(p, ab);
+
+    // Find t using cramer's rule, and make sure the intersection happens in front
+    // of the camera
+    float t = dot(q, ac) * inv_det;
+    if (t < EPSILON) return hit;
+
+    // Find the barycentric coordinates
+    float u = dot(p, o) * inv_det;
+    float v = dot(q, ray.direction) * inv_det;
+    float w = 1 - u - v;    // to avoid gaps due to precision issues
+
+    // Check bounds of the barycentric coordinates.
+    vec3 coords = vec3(u, v, w);
+    if (any(lessThan(coords, vec3(0))) || any(greaterThan(coords, vec3(1)))) return hit;
+
+    hit.did_hit = true;
+    hit.t = t;
+    hit.pos = ray_at(ray, t);
+    hit.is_exiting = dot(plane_normal, ray.direction) > 0;
+
+    if (interpolate_normals) {
+        // interpolate across the normals using the barycentric coordinates
+        hit.normal = triangle.normals[0] * w +
+                     triangle.normals[1] * u +
+                     triangle.normals[2] * v;
+    } else {
+        hit.normal = plane_normal;
+    }
+
+    return hit;
+}
+
+// todo: do something about this name clash
+HitRecord hit_sphere(Triangle sphere, Ray ray) {
+    /*  line (parametric):
+            x = orig_x + dir_x * t
+            y = orig_y + dir_y * t   ->   p = orig + dir * t
+            z = orig_z + dir_z * t
+
+        sphere formula:
+            (x - c_x)^2 + (y - c_y)^2 + (z - c_z)^2 <= radius^2    ->    (p - center).(p - center) <= radius^2
+
+        now we plug the line in the sphere formula and solve for t:
+            (orig + dir * t - center).(orig + dir * t - center) <= r^2
+
+            [...]
+
+            a = dir.dir
+            b = 2dir.(orig - center)
+            c = (center - orig).(center - orig) - radius^2
+
+        referring to the quadratic formula, we can tell whether the ray intersected the sphere by the discriminant:
+            hit_sphere = (b^2 - 4ac >= 0)
+    */
+
+    vec3 center = sphere.vertices[0];
+    float radius = sphere.vertices[1].x;
+
+    vec3 blur_offset = materials.get[sphere.material_idx].motion_blur.xyz * ray.time;
+    center += blur_offset;
+
+    vec3 delta = (center - ray.origin);
+
+    // todo: apply the simpler formula for b multiples of 2
+    float a = dot(ray.direction, ray.direction);
+    float b = -2 * dot(ray.direction, delta);
+    float c = dot(delta, delta) - radius * radius;
+
+    float discriminant = b*b - 4*a*c;
+    float t = (-b - sqrt(discriminant)) / 2*a;
+
+    HitRecord hit;
+
+    hit.t = t;
+    hit.pos = ray_at(ray, t);
+    hit.normal = normalize(hit.pos - center);
+
+    bool did_not_hit = discriminant < 0;
+    bool is_behind = t < EPSILON; // avoid floating point imprecisions
+
+    hit.did_hit = !(did_not_hit || is_behind);
+    hit.is_exiting = dot(hit.normal, ray.direction) > 0;
+
+    return hit;
+}
+
+/*
+ * AABB intersection code using the Slab method.
+ *
+ * This works by first solving the t parameter for each plane intersection, and
+ * then checking if any of the intersections with the plane that should be closer
+ * to the camera end up further away than the intersections of the opposite plane.
+ *
+ * More info at https://en.wikipedia.org/wiki/Slab_method
+ */
+float dist_aabb(Ray ray, BvhNode aabb) {
+    vec3 inv_dir = 1 / ray.direction;
+
+    // Solve for the intersection points with all 6 planes:
+    // origin_x + t * direction_x = x  (for all 3 dimensions)
+    vec3 t1 = (aabb.min - ray.origin) * inv_dir;
+    vec3 t2 = (aabb.max - ray.origin) * inv_dir;
+
+    // Get the closest and furthest intersections for each dimension
+    vec3 d_min = min(t1, t2);
+    vec3 d_max = max(t1, t2);
+
+    float t_min = max(max(d_min.x, d_min.y), d_min.z);
+    float t_max = min(min(d_max.x, d_max.y), d_max.z);
+
+    bool did_hit = t_min <= t_max && t_max > 0;
+
+    return did_hit ? t_min : 1.0 / 0.0; //infinity
+}
+
+HitRecord hit_meshes(Ray ray) {
+    HitRecord hit;
+    hit.t = 1.0 / 0.0; // infinity
+    hit.did_hit = false;
+
+    // Setup stack for tree traversal
+    uint stack[MAX_BVH_DEPTH + 1], stack_ptr = 0;
+    stack[stack_ptr++] = 0;
+
+    while (stack_ptr > 0) {
+        BvhNode node = bvh.nodes[stack[--stack_ptr]];
+
+        // if it's a leaf, attempt to intersect its meshes
+        if (node.amt != 0) {
+            for (int tri = 0; tri < node.amt; tri++) {
+                Triangle triangle = triangles.get[node.idx + tri];
+                HitRecord current_hit;
+
+                if (!triangle.is_sphere) {
+                    current_hit = hit_triangle(triangle, ray, false); // todo: smooth normals
+                } else {
+                    current_hit = hit_sphere(triangle, ray);
+                }
+
+                if (current_hit.did_hit && current_hit.t < hit.t) {
+                    hit = current_hit;
+                    hit.material = materials.get[triangle.material_idx];
+                }
+            }
+
+        // Else push both nodes on the stack, in order of closest to furthest
+        // Only actually push nodes that can be closer than the already-hit
+        } else {
+            uint idx = node.idx;
+            float dist_left =  dist_aabb(ray, bvh.nodes[idx + 0]);
+            float dist_right = dist_aabb(ray, bvh.nodes[idx + 1]);
+
+            if (dist_left < dist_right) {
+                if (dist_right < hit.t) stack[stack_ptr++] = idx + 1;
+                if (dist_left < hit.t)  stack[stack_ptr++] = idx;
+            } else {
+                if (dist_left < hit.t)  stack[stack_ptr++] = idx;
+                if (dist_right < hit.t) stack[stack_ptr++] = idx + 1;
+            }
+        }
+    }
+
+    return hit;
+}
+
+/* Entrypoint */
+void main() {
+    ivec2 coordinates = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = ivec2(camera.resolution); // todo: figure out how to get resolution
+    uint idx = coordinates.x + coordinates.y * size.x;
+
+    if (coordinates.x < size.x && coordinates.y < size.y) {
+        seed = uint(coordinates.x + size.x * coordinates.y + camera.frame * camera.resolution.y * camera.resolution.x);
+
+        Ray ray = raybuffer.rays[idx];
+        hitbuffer.records[idx] = hit_meshes(ray);
+    }
+}

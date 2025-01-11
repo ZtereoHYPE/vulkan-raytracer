@@ -1,0 +1,48 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_scalar_block_layout : enable
+
+#include "util/parameters.comp"
+#include "util/structures.comp"
+
+// todo: experiment
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 0) uniform Camera {
+    uvec2 resolution;
+    vec2 uv;
+    float focal_len;
+    float focus_distance;
+    float aperture_radius;
+    uint frame;
+    vec4 origin;
+    mat4 rotation;
+} camera;
+
+layout(std430, set = 0, binding = 1) buffer RayBuffer {
+    Ray rays[];
+} raybuffer;
+
+layout(set = 0, binding = 2, rgba8) uniform image2D accumulator;
+
+layout(set = 1, binding = 0) writeonly uniform image2D framebuffer;
+
+vec4 gamma_correction(vec4 color) {
+    return sqrt(color);
+}
+
+/* Entrypoint */
+void main() {
+    ivec2 coordinates = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = ivec2(camera.resolution);
+    uint idx = coordinates.x + coordinates.y * size.x;
+
+    if (coordinates.x < size.x && coordinates.y < size.y) {
+        imageStore(framebuffer, coordinates, gamma_correction(vec4(raybuffer.rays[idx].light, 1)));
+
+        // this shows the amount of fired rays for the given pixel
+//        imageStore(framebuffer, coordinates, gamma_correction(vec4(float(raybuffer.rays[idx].time) / float(4))));
+    }
+}
+

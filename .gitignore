@@ -4,3 +4,4 @@ VulkanTest
 .idea
 obj-convert/target
 obj-convert/Cargo.lock
+scenes/utah.yaml    # 200MB test scene

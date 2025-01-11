@@ -1,5 +1,3 @@
-int quadrant = 0;
-int subdivisions_per_axis = 2;
 const float PI = 3.1415926;
 uint seed;
 
@@ -13,17 +11,16 @@ float pgc_random(inout uint seed) {
 }
 
 // this subdivides the randomness into quadrants as a form of basic low-discrepancy noise.
-// might be expensive.
-vec2 pixel_offset(inout uint seed) {
-    float offset = 1.0 / float(subdivisions_per_axis);
+vec2 pixel_offset(inout uint seed, inout uint quadrant) {
+    float offset = 1.0 / float(SUBDIVISIONS_PER_AXIS);
 
     float x = pgc_random(seed) * offset;
     float y = pgc_random(seed) * offset;
 
-    x += float(quadrant % subdivisions_per_axis) * offset;
-    y += float(quadrant / subdivisions_per_axis) * offset;
+    x += float(quadrant % SUBDIVISIONS_PER_AXIS) * offset;
+    y += float(quadrant / SUBDIVISIONS_PER_AXIS) * offset;
 
-    quadrant = (quadrant + 1) % (subdivisions_per_axis * subdivisions_per_axis);
+    quadrant = (quadrant + 1) % (SUBDIVISIONS_PER_AXIS * SUBDIVISIONS_PER_AXIS);
     return vec2(x - 0.5, y - 0.5);
 }
 
@@ -32,7 +29,7 @@ float random_normal(inout uint seed) {
     float a = sqrt(-2.0 * log(1.0 - pgc_random(seed)));
     float b = 2.0 * PI * pgc_random(seed);
 
-    return cos(b) * min(a, 1000000000.0); //todo: figure out why this is exploding
+    return cos(b) * min(a, 1000000000.0); // todo: figure out why this is exploding
 }
 
 // Since normal distributions are spherically symmetric, sampling it for each coordinate

@@ -1,0 +1,161 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_scalar_block_layout : enable
+
+#include "util/parameters.comp"
+#include "util/structures.comp"
+#include "util/random.comp"
+
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(std430, set = 0, binding = 0) uniform Camera {
+    uvec2 resolution;
+    vec2 uv;
+    float focal_len;
+    float focus_distance;
+    float aperture_radius;
+    uint frame;
+    vec4 origin;
+    mat4 rotation;
+} camera;
+
+layout(std430, set = 0, binding = 1) readonly buffer MaterialBuffer {
+    Material get[]; // this makes the syntax a bit more readable: materials.get[3]
+} materials;
+
+layout(std430, set = 0, binding = 2) buffer RayBuffer {
+    Ray rays[];
+} raybuffer;
+
+layout(std430, set = 0, binding = 3) readonly buffer HitBuffer {
+    HitRecord records[];
+} hitbuffer;
+
+layout(set = 0, binding = 4, rgba8) uniform image2D accumulator;
+
+vec3 background_color(Ray ray) {
+    float blend = 0.5 * ray.direction.y + 0.5;
+    return mix(vec3(0.6, 0.8, 1.0), vec3(0.2, 0.4, 1.0), blend);
+//    return vec3(0);
+}
+
+// Schlick approximation of Fresnel on glass
+float schlick_reflectance(float cos_angle, float ior) {
+    float r0 = (1 - ior) / (1 + ior);
+    r0 = r0 * r0;
+    return r0 + (1 - r0) * pow((1 - cos_angle), 5);
+}
+
+// this does not handle intersecting spheres gracefully, the ratios must be pre-divided for that
+void glass_shader(inout Ray ray, HitRecord hit) {
+    vec3 normal = hit.normal;
+    vec3 dir = ray.direction;
+    
+    // Check if we're entering or exiting the glass
+    float ior_ratio;
+    if (hit.is_exiting) {
+        ior_ratio = hit.material.ior;
+        normal = -normal;
+    } else {
+        ior_ratio = 1.0 / hit.material.ior;
+    }
+
+    float cos_angle = min(dot(-dir, normal), 1.0);
+    //float sin_angle = sqrt(1 - cos_angle * cos_angle); // todo: faster sin algos? len(cross
+    float sin_angle = length(cross(-dir, normal));
+
+    bool total_reflection = ior_ratio * sin_angle > 1;
+    bool schlick_reflection = pgc_random(seed) < schlick_reflectance(cos_angle, ior_ratio);
+
+    // Check if we should reflect or refract
+    vec3 out_dir;
+    if (total_reflection || schlick_reflection) {
+        out_dir = dir - 2 * dot(dir, normal) * normal;
+
+    } else {
+        vec3 refracted_ort = ior_ratio * (dir + cos_angle * normal);
+
+        float ort_len = length(refracted_ort);
+        vec3 refracted_par = -sqrt(1 - ort_len * ort_len) * normal;
+
+        out_dir = refracted_ort + refracted_par;
+    }
+
+    // apply fuzziness
+    out_dir = normalize(out_dir + random_unit_vector(seed) * hit.material.roughness / 2);
+
+    ray.direction = out_dir;
+    ray.origin = hit.pos;
+}
+
+// cosine-weighted lambertian lighting
+void weighted_lambertian_shader(inout Ray ray, HitRecord hit) {
+    ray.origin = hit.pos;
+
+    // flip the normal if we are hitting from the "inside"
+    if (hit.is_exiting)
+        hit.normal *= -1;
+
+    // reflectivity: randomly pick between reflecting and opaque based how reflective the material is
+    if (pgc_random(seed) < hit.material.reflectivity) {
+        ray.direction = ray.direction - 2 * dot(hit.normal, ray.direction) * hit.normal;
+        ray.direction = normalize(ray.direction + random_unit_vector(seed) * hit.material.roughness); // fuzzy reflection
+    } else {
+        ray.direction = normalize(hit.normal + random_unit_vector(seed)); // https://www.iue.tuwien.ac.at/phd/ertl/node100.html
+    }
+}
+
+void illuminate_ray(inout Ray ray, HitRecord hit) {
+    /*  The ray only gets light when it hits something emissive.
+        The light that will be "received" from the emissive object
+         will be tinted multiplicatively by all the surfaces the ray
+         hits before reaching the camera.
+        If the ray encounters multiple source of light, all of them
+         will contribute to the light value of the pixel.
+
+        The result is that we only add light to incoming_light when
+         we hit an emissive, and we tint that light to the color that 
+         the ray has assumed so far.
+    */
+    vec3 absorbed_light = vec3(1);
+
+    if (hit.did_hit) {
+        Material material = hit.material;
+        absorbed_light = ray.color * material.emission.xyz;
+
+        if (material.is_glass) {
+            glass_shader(ray, hit);
+        } else {
+            weighted_lambertian_shader(ray, hit);
+        }
+
+        ray.color *= material.base_color.xyz;
+
+    } else {
+        absorbed_light = background_color(ray) * ray.color;
+        ray.out_of_bounds = true;
+    }
+
+    ray.bounce++;
+    ray.light += absorbed_light / float(ray.count + 1);
+
+    if (ray.bounce > MAX_BOUNCES)
+        ray.out_of_bounds = true;
+}
+
+/* Entrypoint */
+void main() {
+    ivec2 coordinates = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = ivec2(camera.resolution);
+    uint idx = coordinates.x + coordinates.y * size.x;
+
+    if (coordinates.x < size.x && coordinates.y < size.y) {
+        seed = uint(coordinates.x + size.x * coordinates.y + camera.frame * camera.resolution.y * camera.resolution.x);
+
+        Ray ray = raybuffer.rays[idx];
+        HitRecord hit = hitbuffer.records[idx];
+        illuminate_ray(ray, hit);
+        // update the ray information for the next bounce
+        raybuffer.rays[idx] = ray;
+    }
+}

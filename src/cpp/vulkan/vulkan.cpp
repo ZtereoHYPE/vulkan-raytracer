@@ -411,7 +411,7 @@ SwapchainKHR createSwapChain(Window &window,
         .compositeAlpha = CompositeAlphaFlagBitsKHR::eOpaque,   // alpha used for blending in compositor
         .presentMode = PresentModeKHR::eFifo,                   // fifo should always be supported
         .clipped = False,                                       // we want the whole image to be rendered
-        .oldSwapchain = VK_NULL_HANDLE,                             // we don't have an old swapchain to "recycle"
+        .oldSwapchain = VK_NULL_HANDLE,                      // we don't have an old swapchain to "recycle"
     };
 
     SwapchainKHR swapChain = device.createSwapchainKHR(createInfo);
@@ -504,7 +504,6 @@ std::tuple<Image, ImageView, DeviceMemory> createImage(PhysicalDevice const &phy
                                                        Device const &device,
                                                        Extent2D extent,
                                                        Format format) {
-
     ImageCreateInfo imageInfo {
         .sType = StructureType::eImageCreateInfo,
         .imageType = ImageType::e2D,
@@ -598,8 +597,6 @@ Sampler createSampler(Device const &device) {
 /*
  * Allocates a command buffer for a specific command pool to store all the
  * to-be-submitted commands.
- *
- * todo: research the advantage of using multiple command buffers in a single-threaded context
  */
 CommandBuffer createCommandBuffer(Device const &device, CommandPool const &commandPool) {
     CommandBufferAllocateInfo allocInfo {
@@ -613,62 +610,59 @@ CommandBuffer createCommandBuffer(Device const &device, CommandPool const &comma
     return device.allocateCommandBuffers(allocInfo)[0];
 }
 
-/*
- * Creates the layout that the descriptor sets will have on the shader, describing
- * how and where each of them will be bound.
- */
-DescriptorSetLayout createComputeDescriptorSetLayout(Device const &device) {
-    // This uniform will contain the camera data
-    DescriptorSetLayoutBinding uboLayoutBinding {
-        .binding = 0,
-        .descriptorType = DescriptorType::eUniformBuffer,
-        .descriptorCount = 1,
-        .stageFlags = ShaderStageFlagBits::eCompute, // only for compute
+DescriptorSet createDescriptorSet(Device const &device,
+                                  DescriptorSetLayout const &descriptorSetLayout,
+                                  DescriptorPool const &descriptorPool,
+                                  std::vector<DescriptorType> types,
+                                  DescriptorBufferInfo bufferInfos[],
+                                  DescriptorImageInfo imageInfos[]) {
+
+    // We first allocate all of the descriptor sets
+    DescriptorSetAllocateInfo allocInfo {
+        .sType = StructureType::eDescriptorSetAllocateInfo,
+        .descriptorPool = descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &descriptorSetLayout,
     };
 
-    // This buffer will contain the bvh data
-    DescriptorSetLayoutBinding bvhLayoutBinding {
-        .binding = 1,
-        .descriptorType = DescriptorType::eStorageBuffer,
-        .descriptorCount = 1,
-        .stageFlags = ShaderStageFlagBits::eCompute,
-    };
+    DescriptorSet descriptorSet = device.allocateDescriptorSets(allocInfo)[0];
 
-    // This buffer will contain the material data
-    DescriptorSetLayoutBinding materialLayoutBinding {
-        .binding = 2,
-        .descriptorType = DescriptorType::eStorageBuffer,
-        .descriptorCount = 1,
-        .stageFlags = ShaderStageFlagBits::eCompute,
-    };
+    // Populate the descriptor set with the buffers / images it points to
+    std::vector<WriteDescriptorSet> descriptorWrites{};
+    size_t buffers = 0, images = 0;
+    for (uint j = 0; j < types.size(); ++j) {
+        WriteDescriptorSet descriptorWrite {
+            .sType = StructureType::eWriteDescriptorSet,
+            .dstSet = descriptorSet,
+            .dstBinding = j,
+            .descriptorCount = 1,
+            .descriptorType = types[j],
+        };
 
-    // This buffer will contain the triangle data
-    DescriptorSetLayoutBinding triangleLayoutBinding {
-        .binding = 3,
-        .descriptorType = DescriptorType::eStorageBuffer,
-        .descriptorCount = 1,
-        .stageFlags = ShaderStageFlagBits::eCompute,
-    };
+        if (types[j] == DescriptorType::eStorageBuffer || types[j] == DescriptorType::eUniformBuffer) {
+            descriptorWrite.pBufferInfo = &bufferInfos[buffers++];
+        } else if (types[j] == DescriptorType::eStorageImage) {
+            descriptorWrite.pImageInfo = &imageInfos[images++];
+        } else throw std::runtime_error("Encountered unknown descriptor!");
 
-    // This is the image where the ray traced frames will be accumulated
-    DescriptorSetLayoutBinding accumulatorLayoutBinding {
-        .binding = 4,
-        .descriptorType = DescriptorType::eStorageImage,
-        .descriptorCount = 1,
-        .stageFlags = ShaderStageFlagBits::eCompute,
-    };
+        descriptorWrites.push_back(descriptorWrite);
+    }
 
-    // This is the swapchain image that will be bound
-    DescriptorSetLayoutBinding swapchainLayoutBinding {
-        .binding = 5,
-        .descriptorType = DescriptorType::eStorageImage,
-        .descriptorCount = 1,
-        .stageFlags = ShaderStageFlagBits::eCompute,
-    };
+    device.updateDescriptorSets(descriptorWrites, nullptr);
 
-    std::vector bindings = {
-        uboLayoutBinding, bvhLayoutBinding, materialLayoutBinding, triangleLayoutBinding, accumulatorLayoutBinding, swapchainLayoutBinding
-    };
+    return descriptorSet;
+}
+
+DescriptorSetLayout createDescriptorSetLayout(Device const &device, std::vector<DescriptorType> types) {
+    std::vector<DescriptorSetLayoutBinding> bindings{};
+    for (uint idx = 0; idx < types.size(); ++idx) {
+        bindings.push_back(DescriptorSetLayoutBinding {
+            .binding = idx,
+            .descriptorType = types[idx],
+            .descriptorCount = 1,
+            .stageFlags = ShaderStageFlagBits::eCompute,
+        });
+    }
 
     DescriptorSetLayoutCreateInfo layoutInfo {
         .sType = StructureType::eDescriptorSetLayoutCreateInfo,
@@ -679,195 +673,258 @@ DescriptorSetLayout createComputeDescriptorSetLayout(Device const &device) {
     return device.createDescriptorSetLayout(layoutInfo);
 }
 
-/*
- * Creates the descriptor sets required for the compute shader to execute.
- *
- * There are 5 descriptors for each of the swapchain images:
- *  - Uniform Buffer: Stores and binds the uniform data to the shader
- *  - Mesh Info Buffer: Shader Buffer Object storing information about the meshes to be rendered.
- *  - Triangle Buffer: Shader Buffer Object storing triangles or sphere coordinates.
- *  - Accumulator Image: Image used to accumulate ray traced frames.
- *  - SwapChain Image: Image acquired from the SwapChain to be able to output those frames
- *                     directly from the compute shader.
- * 
- * Note that Mesh Info and Triangle descriptors point to the same buffer in the GPU memory,
- * just with an offset that gets decided at runtime depending on the mesh data.
- */
-std::vector<DescriptorSet> createComputeDescriptorSets(Device const &device,
-                                                       DescriptorSetLayout const &descriptorSetLayout,
-                                                       DescriptorPool const &descriptorPool,
-                                                       Buffer const &uniformBuffer,
-                                                       Buffer const &shaderBuffer,
-                                                       uint bvhSize,
-                                                       uint matSize,
-                                                       ImageView const &accumulatorImageView,
-                                                       std::vector<ImageView> swapChainImageViews,
-                                                       Sampler sampler) {
+std::pair<DescriptorSetLayout, DescriptorSet>
+createGenerateDescriptorSet(Device const &device,
+                            DescriptorPool const &pool,
+                            Buffer const &uniformBuffer,
+                            Buffer const &rayBuffer) {
 
-    // Create a copy of the layout for each descriptor set
-    std::vector<DescriptorSetLayout> layouts = std::vector{ swapChainImageViews.size(), descriptorSetLayout };
-
-    // We first allocate all of the descriptor sets
-    DescriptorSetAllocateInfo allocInfo {
-        .sType = StructureType::eDescriptorSetAllocateInfo,
-        .descriptorPool = descriptorPool,
-        .descriptorSetCount = (uint32_t) swapChainImageViews.size(),
-        .pSetLayouts = layouts.data(),
+    std::vector types{
+        DescriptorType::eUniformBuffer, // camera uniform
+        DescriptorType::eStorageBuffer, // ray buffer
+    };
+    DescriptorBufferInfo bufferInfos[] {
+        {
+            .buffer = uniformBuffer,
+            .offset = 0,
+            .range = WholeSize,
+        },{
+            .buffer = rayBuffer,
+            .offset = 0,
+            .range = WholeSize,
+        },
     };
 
-    std::vector<DescriptorSet> descriptorSets = device.allocateDescriptorSets(allocInfo);
+    DescriptorSetLayout layout = createDescriptorSetLayout(device, types);
+    DescriptorSet set = createDescriptorSet(device, layout, pool, types, bufferInfos, {});
+    return std::make_pair(layout, set);
+}
 
-    // And then we populate the descriptor sets (one for each swapchain, pointing to the right one)
-    for (int i = 0; i < swapChainImageViews.size(); i++) {
-        DescriptorBufferInfo uniformBufferInfo {
+std::pair<DescriptorSetLayout, DescriptorSet>
+createIntersectDescriptorSet(Device const &device,
+                             DescriptorPool const &pool,
+                             Buffer const &uniformBuffer,
+                             Buffer const &rayBuffer,
+                             Buffer const &hitBuffer,
+                             Buffer const &sceneBuffer,
+                             uint bvhSize,
+                             uint matSize) {
+
+    std::vector types {
+        DescriptorType::eUniformBuffer, // camera
+        DescriptorType::eStorageBuffer, // bvh
+        DescriptorType::eStorageBuffer, // material
+        DescriptorType::eStorageBuffer, // triangles
+        DescriptorType::eStorageBuffer, // ray buffer
+        DescriptorType::eStorageBuffer  // hit records
+    };
+    DescriptorBufferInfo bufferInfos[] {
+        {
             .buffer = uniformBuffer,
-            .offset = static_cast<DeviceSize>(0),
-            .range = WholeSize,
-        };
-
-        DescriptorBufferInfo bvhBufferInfo {
-            .buffer = shaderBuffer,
+            .offset = 0,
+            .range = WholeSize
+        }, {
+            .buffer = sceneBuffer,
             .offset = 0,
             .range = bvhSize,
-        };
-
-        DescriptorBufferInfo materialBufferInfo {
-            .buffer = shaderBuffer,
+        },{
+            .buffer = sceneBuffer,
             .offset = bvhSize,
-            .range = matSize,
-        };
-
-        DescriptorBufferInfo triangleBufferInfo {
-            .buffer = shaderBuffer,
+            .range = bvhSize + matSize,
+        },{
+            .buffer = sceneBuffer,
             .offset = bvhSize + matSize,
             .range = WholeSize,
-        };
+        },{
+            .buffer = rayBuffer,
+            .offset = 0,
+            .range = WholeSize,
+        },{
+            .buffer = hitBuffer,
+            .offset = 0,
+            .range = WholeSize,
+        }
+    };
 
-        DescriptorImageInfo accumulatorImageInfo {
-            .sampler = sampler,
-            .imageView = accumulatorImageView,
-            .imageLayout = ImageLayout::eGeneral, // todo: find a more optimal one
-        };
+    DescriptorSetLayout layout = createDescriptorSetLayout(device, types);
+    DescriptorSet set = createDescriptorSet(device, layout, pool, types, bufferInfos, {});
+    return std::make_pair(layout, set);
+}
 
-        DescriptorImageInfo swapchainImageInfo {
+std::pair<DescriptorSetLayout, DescriptorSet>
+createShadeDescriptorSet(Device const &device,
+                         DescriptorPool const &pool,
+                         Buffer const &uniformBuffer,
+                         Buffer const &rayBuffer,
+                         Buffer const &sceneBuffer,
+                         Buffer const &hitBuffer,
+                         uint bvhSize,
+                         uint matSize,
+                         ImageView const &accumulatorView,
+                         Sampler sampler) {
+
+    std::vector types {
+        DescriptorType::eUniformBuffer, // camera
+        DescriptorType::eStorageBuffer, // material
+        DescriptorType::eStorageBuffer, // ray buffer
+        DescriptorType::eStorageBuffer, // hit records
+        DescriptorType::eStorageImage   // accumulator image
+        // todo: ^ could be samplers? (also below)
+    };
+    DescriptorBufferInfo bufferInfos[] {
+        {
+            .buffer = uniformBuffer,
+            .offset = 0,
+            .range = WholeSize
+        }, {
+            .buffer = sceneBuffer,
+            .offset = bvhSize,
+            .range = matSize,
+        },{
+            .buffer = rayBuffer,
+            .offset = 0,
+            .range = WholeSize,
+        },{
+            .buffer = hitBuffer,
+            .offset = 0,
+            .range = WholeSize,
+        }
+    };
+    DescriptorImageInfo imageInfos[] {
+        {
             .sampler = sampler,
-            .imageView = swapChainImageViews[i],
+            .imageView = accumulatorView,
             .imageLayout = ImageLayout::eGeneral,
-        };
+        },
+    };
 
-        WriteDescriptorSet descriptorWrites[] = {
-            (WriteDescriptorSet) {
-                .sType = StructureType::eWriteDescriptorSet,
-                .dstSet = descriptorSets[i],
-                .dstBinding = 0,
-                .descriptorCount = 1,
-                .descriptorType = DescriptorType::eUniformBuffer,
-                .pBufferInfo = &uniformBufferInfo,
-            },
-            (WriteDescriptorSet) {
-                .sType = StructureType::eWriteDescriptorSet,
-                .dstSet = descriptorSets[i],
-                .dstBinding = 1,
-                .descriptorCount = 1,
-                .descriptorType = DescriptorType::eStorageBuffer,
-                .pBufferInfo = &bvhBufferInfo,
-            },
-            (WriteDescriptorSet) {
-                .sType = StructureType::eWriteDescriptorSet,
-                .dstSet = descriptorSets[i],
-                .dstBinding = 2,
-                .descriptorCount = 1,
-                .descriptorType = DescriptorType::eStorageBuffer,
-                .pBufferInfo = &materialBufferInfo,
-            },
-            (WriteDescriptorSet) {
-                .sType = StructureType::eWriteDescriptorSet,
-                .dstSet = descriptorSets[i],
-                .dstBinding = 3,
-                .descriptorCount = 1,
-                .descriptorType = DescriptorType::eStorageBuffer,
-                .pBufferInfo = &triangleBufferInfo,
-            },
-            (WriteDescriptorSet) {
-                .sType = StructureType::eWriteDescriptorSet,
-                .dstSet = descriptorSets[i],
-                .dstBinding = 4,
-                .descriptorCount = 1,
-                .descriptorType = DescriptorType::eStorageImage,
-                .pImageInfo = &accumulatorImageInfo,
-            },
-            (WriteDescriptorSet) {
-                .sType = StructureType::eWriteDescriptorSet,
-                .dstSet = descriptorSets[i],
-                .dstBinding = 5,
-                .descriptorCount = 1,
-                .descriptorType = DescriptorType::eStorageImage,
-                .pImageInfo = &swapchainImageInfo,
-            },
-        };
-
-        device.updateDescriptorSets(descriptorWrites, nullptr);
-    }
-
-    return descriptorSets;
+    DescriptorSetLayout layout = createDescriptorSetLayout(device, types);
+    DescriptorSet set = createDescriptorSet(device, layout, pool, types, bufferInfos, imageInfos);
+    return std::make_pair(layout, set);
 }
 
 /*
- * Creates a basic compute pipeline and returns it and its layout.
- *
- * The pipeline entrypoint is a shader called "main.comp" and located in 
- * build/shaders/main.comp.spv
+ * This one is trickier than the other because the post process shader needs 2 descriptor sets:
+ * - a normal one for the accumulator buffer
+ * - one that changes every frame for the framebuffer
  */
-Pipeline createComputePipeline(Device const &device,
-                               DescriptorSetLayout const &descriptorSetLayout,
-                               PipelineLayout &pipelineLayout) {
+std::pair<DescriptorSetLayout, DescriptorSet>
+createPostProcessDescriptorSet(Device const &device,
+                               DescriptorPool const &pool,
+                               Buffer const &uniformBuffer,
+                               Buffer const &rayBuffer,
+                               ImageView const &accumulatorView,
+                               Sampler sampler) {
 
-    pipelineLayout = device.createPipelineLayout({
+    std::vector<DescriptorSet> sets{};
+
+    std::vector types {
+        DescriptorType::eUniformBuffer,
+        DescriptorType::eStorageBuffer, // ray buffer
+        DescriptorType::eStorageImage, // accumulator image
+    };
+    DescriptorBufferInfo bufferInfos[] {
+        {
+            .buffer = uniformBuffer,
+            .offset = 0,
+            .range = WholeSize,
+        },{
+            .buffer = rayBuffer,
+            .offset = 0,
+            .range = WholeSize
+        }
+    };
+    DescriptorImageInfo imageInfos[] {{
+        .sampler = sampler,
+        .imageView = accumulatorView,
+        .imageLayout = ImageLayout::eGeneral, // todo: find more optimal?
+    }};
+
+    // Accumulator descriptor set
+    DescriptorSetLayout layout = createDescriptorSetLayout(device, types);
+    DescriptorSet set = createDescriptorSet(device, layout, pool, types, bufferInfos, imageInfos);
+
+    return std::make_pair(layout, set);
+}
+
+std::pair<DescriptorSetLayout, std::vector<DescriptorSet>>
+createFramebufferDescriptorSets(Device const &device,
+                                DescriptorPool const &pool,
+                                std::vector<ImageView> &swapchainViews,
+                                Sampler sampler) {
+
+    std::vector types { DescriptorType::eStorageImage };
+    DescriptorSetLayout layout = createDescriptorSetLayout(device, types);
+
+    std::vector<DescriptorSet> sets{};
+    for (auto const view : swapchainViews) {
+        DescriptorImageInfo imageInfos[] {{
+            .sampler = sampler,
+            .imageView = view,
+            .imageLayout = ImageLayout::eGeneral, // todo: find more optimal?
+        }};
+
+        sets.push_back(createDescriptorSet(device, layout, pool, types, {}, imageInfos));
+    }
+
+    return std::make_pair(layout, sets);
+}
+
+// /*
+//  * Creates a basic compute pipeline and returns it and its layout.
+//  *
+//  * The pipeline entrypoint is a shader called "main.comp" and located in
+//  * build/shaders/main.comp.spv
+//  */
+std::pair<Pipeline, PipelineLayout> createComputePipeline(Device const &device,
+                                                          std::vector<DescriptorSetLayout> const &descriptorSetLayouts,
+                                                          std::string const &shaderPath,
+                                                          std::string const &entrypoint) {
+    auto shaderSrc = readFile(shaderPath);
+
+    PipelineLayout layout = device.createPipelineLayout({
         .sType = StructureType::ePipelineLayoutCreateInfo,
-        .setLayoutCount = 1,
-        .pSetLayouts = &descriptorSetLayout,
+        .setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size()),
+        .pSetLayouts = descriptorSetLayouts.data(),
     });
 
-    auto computeShaderSrc = readFile("build/shaders/main.comp.spv");
-
-    ShaderModule computeShader = device.createShaderModule({
-        .sType = StructureType::eShaderModuleCreateInfo,
-        .codeSize = computeShaderSrc.size(),
-        .pCode = reinterpret_cast<const uint32_t*>(computeShaderSrc.data()),
-    });
     ComputePipelineCreateInfo info = {
         .sType = StructureType::eComputePipelineCreateInfo,
         .stage = {
             .sType = StructureType::ePipelineShaderStageCreateInfo,
             .stage = ShaderStageFlagBits::eCompute,
-            .module = computeShader,
-            .pName = "main",
+            .module = device.createShaderModule({
+                .sType = StructureType::eShaderModuleCreateInfo,
+                .codeSize = shaderSrc.size(),
+                .pCode = reinterpret_cast<const uint32_t*>(shaderSrc.data()),
+            }),
+            .pName = entrypoint.c_str(),
         },
-        .layout = pipelineLayout,
+        .layout = layout,
     };
 
     // we don't have a pipeline cache
     auto [_, computePipeline] = device.createComputePipeline(nullptr, info);
 
-    return computePipeline;
+    return std::make_pair(computePipeline, layout);
 }
 
 /*
  * Creates a descriptor pool ready for all the required descriptor sets.
  */
-DescriptorPool createDescriptorPool(Device const &device, int maxSets) {
+DescriptorPool createDescriptorPool(Device const &device, size_t swapchainSize) {
     DescriptorPoolSize poolSize[3];
     poolSize[0].type = DescriptorType::eUniformBuffer;
-    poolSize[0].descriptorCount = maxSets;
+    poolSize[0].descriptorCount = 4; // one per shader
     poolSize[1].type = DescriptorType::eStorageBuffer;
-    poolSize[1].descriptorCount = 2 * maxSets;
+    poolSize[1].descriptorCount = 10; // total amount of buffer bindings
     poolSize[2].type = DescriptorType::eStorageImage;
-    poolSize[2].descriptorCount = 2 * maxSets;
+    poolSize[2].descriptorCount = 2 + swapchainSize; // acc + (framebuff * swapchainSize)
 
     return device.createDescriptorPool({
         .sType = StructureType::eDescriptorPoolCreateInfo,
         .flags = DescriptorPoolCreateFlagBits::eFreeDescriptorSet, // to allow descriptor sets to destroy themselves
-        .maxSets = static_cast<uint32_t>(maxSets), // max number of allocated descriptor sets
+        .maxSets = static_cast<uint32_t>(4 + swapchainSize), // 4 stages + framebuffers
         .poolSizeCount = 3,
         .pPoolSizes = poolSize,
     });
@@ -952,7 +1009,7 @@ std::tuple<Buffer, DeviceMemory> createBuffer(PhysicalDevice const &physicalDevi
         .sType = StructureType::eBufferCreateInfo,
         .size = size,
         .usage = usageFlags,
-        .sharingMode = SharingMode::eExclusive, // only used by graphics queue (unlike potentially the swapchain imgs)
+        .sharingMode = SharingMode::eExclusive, // only used by one queue
     });
 
     // allocate the needed memory

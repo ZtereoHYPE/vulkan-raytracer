@@ -86,24 +86,54 @@ vk::Sampler createSampler(vk::Device const &device);
 
 vk::CommandBuffer createCommandBuffer(vk::Device const &device, vk::CommandPool const &commandPool);
 
-vk::DescriptorSetLayout createComputeDescriptorSetLayout(vk::Device const &device);
+std::pair<vk::DescriptorSetLayout, vk::DescriptorSet>
+createGenerateDescriptorSet(vk::Device const &device,
+                            vk::DescriptorPool const &pool,
+                            vk::Buffer const &uniformBuffer,
+                            vk::Buffer const &rayBuffer);
 
-std::vector<vk::DescriptorSet> createComputeDescriptorSets(vk::Device const &device,
-                                                           vk::DescriptorSetLayout const &descriptorSetLayout,
-                                                           vk::DescriptorPool const &descriptorPool,
-                                                           vk::Buffer const &uniformBuffer,
-                                                           vk::Buffer const &shaderBuffer,
-                                                           uint bvhSize,
-                                                           uint matSize,
-                                                           vk::ImageView const &accumulatorImageView,
-                                                           std::vector<vk::ImageView> swapChainImageViews,
-                                                           vk::Sampler sampler);
+std::pair<vk::DescriptorSetLayout, vk::DescriptorSet>
+createIntersectDescriptorSet(vk::Device const &device,
+                             vk::DescriptorPool const &pool,
+                             vk::Buffer const &uniformBuffer,
+                             vk::Buffer const &rayBuffer,
+                             vk::Buffer const &hitBuffer,
+                             vk::Buffer const &sceneBuffer,
+                             uint bvhSize,
+                             uint matSize);
 
-vk::Pipeline createComputePipeline(vk::Device const &device,
-                                   vk::DescriptorSetLayout const &descriptorSetLayout,
-                                   vk::PipelineLayout &pipelineLayout);
+std::pair<vk::DescriptorSetLayout, vk::DescriptorSet>
+createShadeDescriptorSet(vk::Device const &device,
+                         vk::DescriptorPool const &pool,
+                         vk::Buffer const &uniformBuffer,
+                         vk::Buffer const &rayBuffer,
+                         vk::Buffer const &sceneBuffer,
+                         vk::Buffer const &hitBuffer,
+                         uint bvhSize,
+                         uint matSize,
+                         vk::ImageView const &accumulatorView,
+                         vk::Sampler sampler);
 
-vk::DescriptorPool createDescriptorPool(vk::Device const &device, int maxSets);
+std::pair<vk::DescriptorSetLayout, vk::DescriptorSet>
+createPostProcessDescriptorSet(vk::Device const &device,
+                               vk::DescriptorPool const &pool,
+                               vk::Buffer const &uniformBuffer,
+                               vk::Buffer const &rayBuffer,
+                               vk::ImageView const &accumulatorView,
+                               vk::Sampler sampler);
+
+std::pair<vk::DescriptorSetLayout, std::vector<vk::DescriptorSet>>
+createFramebufferDescriptorSets(vk::Device const &device,
+                                vk::DescriptorPool const &pool,
+                                std::vector<vk::ImageView> &swapchainViews,
+                                vk::Sampler sampler);
+
+std::pair<vk::Pipeline, vk::PipelineLayout> createComputePipeline(vk::Device const &device,
+                                                                  std::vector<vk::DescriptorSetLayout> const &descriptorSetLayouts,
+                                                                  std::string const &shaderPath,
+                                                                  std::string const &entrypoint);
+
+vk::DescriptorPool createDescriptorPool(vk::Device const &device, size_t swapchainSize);
 
 void copyBuffer(vk::Device const &device,
                 vk::CommandPool const &commandPool,

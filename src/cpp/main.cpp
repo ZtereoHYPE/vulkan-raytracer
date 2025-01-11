@@ -11,7 +11,7 @@ class RayTracerProgram {
     }
 
    private:
-    Scene scene{ "scenes/benchmark.yaml" };
+    Scene scene{ "scenes/spheres_blur.yaml" };
     Window window{ 
         "Vulkan RayTracer", 
         scene.getCameraControls().resolution[0], 
@@ -24,10 +24,21 @@ class RayTracerProgram {
     std::vector<vk::Image> swapChainImages;
     vk::Queue presentQueue;
     vk::Queue computeQueue;
-    vk::Pipeline computePipeline;
-    vk::PipelineLayout computePipelineLayout;
 
-    std::vector<vk::DescriptorSet> computeDescriptorSets;
+    vk::Pipeline genPipeline;
+    vk::Pipeline intPipeline;
+    vk::Pipeline shadePipeline;
+    vk::Pipeline postPipeline;
+    vk::PipelineLayout genLayout;
+    vk::PipelineLayout intLayout;
+    vk::PipelineLayout shadeLayout;
+    vk::PipelineLayout postLayout;
+
+    vk::DescriptorSet genDescriptorSet;
+    vk::DescriptorSet intDescriptorSet;
+    vk::DescriptorSet shadeDescriptorSet;
+    vk::DescriptorSet postDescriptorSet;
+    std::vector<vk::DescriptorSet> frameDescriptorSet;
     vk::CommandBuffer computeCommandBuffer;
 
     vk::Fence computeInFlightFence;
@@ -35,7 +46,7 @@ class RayTracerProgram {
     vk::Semaphore computeFinishedSemaphore = VK_NULL_HANDLE;
 
     void* uniformMemoryMap = nullptr;
-    void* computeSSBOMemoryMap = nullptr;
+    void* sceneMemoryMap = nullptr;
 
     // performance measure
     uint32_t frameCounter = 0;
@@ -47,63 +58,82 @@ class RayTracerProgram {
         vk::Instance instance = createInstance();
         vk::DebugUtilsMessengerEXT debugMsgr = setupDebugMessenger(instance);
 
+
+        // Window, device, and swapchain initialization
         vk::SurfaceKHR surface = window.createVulkanSurface(instance);
-
         vk::PhysicalDevice physicalDevice = pickPhysicalDevice(instance, surface);
-
         QueueFamilyIndices queueFamilies = findQueueFamilies(physicalDevice, surface); //queue families that will be used
         device = createLogicalDevice(physicalDevice, queueFamilies);
 
-        presentQueue = device.getQueue(queueFamilies.presentFamily.value(), 0);
-        computeQueue = device.getQueue(queueFamilies.computeFamily.value(), 0);
-
         vk::Format swapChainImageFormat;
         swapChain = createSwapChain(window,
-                                    physicalDevice, 
+                                    physicalDevice,
                                     device,
-                                    surface, 
+                                    surface,
                                     queueFamilies,
-                                    swapChainImages, 
+                                    swapChainImages,
                                     swapChainImageFormat,
                                     swapChainExtent);
-
         std::vector<vk::ImageView> swapChainImageViews = createSwapchainViews(device, swapChainImages, swapChainImageFormat);
 
-        vk::DescriptorSetLayout computeDescriptorSetLayout = createComputeDescriptorSetLayout(device);
 
-        computePipeline = createComputePipeline(device, computeDescriptorSetLayout, computePipelineLayout);
-
-        auto [uniformBuffer, uniformMemory, uniMap] = createMappedBuffer(physicalDevice, device, sizeof(CameraControlsUniform), vk::BufferUsageFlagBits::eUniformBuffer);
-        this->uniformMemoryMap = uniMap;
-
-        auto [bvhSize, matSize, triSize] = scene.getBufferSizes();
-
-        printf("log: Total scene size: %lu + %lu + %lu = %lu\n", bvhSize, matSize, triSize, bvhSize + matSize + triSize);
-
-        auto [computeSSBO, computeSSBOMemory, ssboMap] = createMappedBuffer(physicalDevice, device, bvhSize + matSize + triSize, vk::BufferUsageFlagBits::eStorageBuffer);
-        this->computeSSBOMemoryMap = ssboMap;
-
-        auto [accumulatorImage, accumulatorView, accumulatorMemory] = createImage(physicalDevice, device, swapChainExtent, vk::Format::eR8G8B8A8Unorm);
-
+        // Queue and command pool initialization
+        presentQueue = device.getQueue(queueFamilies.presentFamily.value(), 0);
+        computeQueue = device.getQueue(queueFamilies.computeFamily.value(), 0);
         vk::CommandPool computeCommandPool = createCommandPool(device, queueFamilies.computeFamily.value());
-        transitionImageLayout(device, computeCommandPool, computeQueue, accumulatorImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
-
-        vk::DescriptorPool descriptorPool = createDescriptorPool(device, swapChainImageViews.size());
-        vk::Sampler sampler = createSampler(device);
-
         computeCommandBuffer = createCommandBuffer(device, computeCommandPool);
 
-        computeDescriptorSets =  createComputeDescriptorSets(device,
-                                                            computeDescriptorSetLayout, 
-                                                            descriptorPool, 
-                                                            uniformBuffer, 
-                                                            computeSSBO, 
-                                                            bvhSize,
-                                                            matSize,
-                                                            accumulatorView, 
-                                                            swapChainImageViews, 
-                                                            sampler);
 
+        // Images and Buffers allocation and initialization
+        auto [bvhSize, matSize, triSize] = scene.getBufferSizes();
+        printf("log: Total scene size: %lu + %lu + %lu = %lu B\n", bvhSize, matSize, triSize, bvhSize + matSize + triSize);
+
+        auto [uniformBuffer, uniformMemory, uniformMemoryMap] = createMappedBuffer(physicalDevice, device, sizeof(CameraControlsUniform), vk::BufferUsageFlagBits::eUniformBuffer);
+        this->uniformMemoryMap = uniformMemoryMap;
+
+        auto [sceneBuffer, sceneMemory, sceneMemoryMap] = createMappedBuffer(physicalDevice, device, bvhSize + matSize + triSize, vk::BufferUsageFlagBits::eStorageBuffer);
+        this->sceneMemoryMap = sceneMemoryMap;
+
+        // todo: triple check this math
+        size_t rayBufferSize = swapChainExtent.width * swapChainExtent.height * 24 * 24;
+        size_t hitBufferSize = swapChainExtent.width * swapChainExtent.height * 172 * 24;
+        auto [rayBuffer, rayMemory] = createBuffer(physicalDevice, device, rayBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        auto [hitBuffer, hitMemory] = createBuffer(physicalDevice, device, hitBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+        auto [accumulatorImage, accumulatorView, accumulatorMemory] = createImage(physicalDevice, device, swapChainExtent, vk::Format::eR8G8B8A8Unorm);
+        transitionImageLayout(device, computeCommandPool, computeQueue, accumulatorImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
+
+
+        // Descriptor sets and pipeline creation
+        vk::DescriptorPool descriptorPool = createDescriptorPool(device, (size_t) swapChainImageViews.size());
+        vk::Sampler sampler = createSampler(device);
+
+        auto [genDescrLayout, genDescrSet] = createGenerateDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer);
+        auto [intDescrLayout, intDescrSet] = createIntersectDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, hitBuffer, sceneBuffer, bvhSize, matSize);
+        auto [shadeDescrLayout, shadeDescrSet] = createShadeDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, sceneBuffer, hitBuffer, bvhSize, matSize, accumulatorView, sampler);
+        auto [postDescrLayout, postDescrSet] = createPostProcessDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, accumulatorView, sampler);
+        auto [frameDescrLayout, frameDescrSets] = createFramebufferDescriptorSets(device, descriptorPool, swapChainImageViews, sampler);
+        this->genDescriptorSet = genDescrSet;
+        this->intDescriptorSet = intDescrSet;
+        this->shadeDescriptorSet = shadeDescrSet;
+        this->postDescriptorSet = postDescrSet;
+        this->frameDescriptorSet = frameDescrSets;
+
+        auto [genPipeline, genLayout] = createComputePipeline(device, {genDescrLayout}, "build/shaders/generate.comp.spv", "main"); // todo: move main in function
+        auto [intPipeline, intLayout] = createComputePipeline(device, {intDescrLayout}, "build/shaders/intersect.comp.spv", "main");
+        auto [shadePipeline, shadeLayout] = createComputePipeline(device, {shadeDescrLayout}, "build/shaders/shade.comp.spv", "main");
+        auto [postPipeline, postLayout] = createComputePipeline(device, {postDescrLayout, frameDescrLayout}, "build/shaders/postprocess.comp.spv", "main");
+        this->genPipeline = genPipeline;
+        this->intPipeline = intPipeline;
+        this->shadePipeline = shadePipeline;
+        this->postPipeline = postPipeline;
+        this->genLayout = genLayout;
+        this->intLayout = intLayout;
+        this->shadeLayout = shadeLayout;
+        this->postLayout = postLayout;
+
+
+        // Synchronization structure initialization
         vk::SemaphoreCreateInfo semaphoreInfo {
             .sType = vk::StructureType::eSemaphoreCreateInfo
         };
@@ -126,7 +156,7 @@ class RayTracerProgram {
     }
 
     void mainLoop() {
-        scene.writeBuffers(computeSSBOMemoryMap);
+        scene.writeBuffers(sceneMemoryMap);
 
         while (!window.shouldClose()) {
             window.pollEvents();
@@ -207,8 +237,6 @@ class RayTracerProgram {
             .sType = vk::StructureType::eCommandBufferBeginInfo
         });
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, computePipeline);
-
         // Transition the layout of the image to one compute shaders can output to (VK_IMAGE_LAYOUT_GENERAL)
         // todo: this ideally happens before waiting for the fence, or the fence shouldn't exist at all
         vk::ImageMemoryBarrier layoutTransition = {
@@ -238,11 +266,66 @@ class RayTracerProgram {
             layoutTransition
         );
 
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, computePipelineLayout, 0, computeDescriptorSets[imageIndex], nullptr);
-
         // todo calculate the bounds better: this dispatches an extra unit row when width % TILE_SIZE == 0
-        commandBuffer.dispatch(swapChainExtent.width / TILE_SIZE + 1, swapChainExtent.height / TILE_SIZE + 1, 1);
+        size_t dispatchWidth = swapChainExtent.width / TILE_SIZE + 1;
+        size_t dispatchHeight = swapChainExtent.height / TILE_SIZE + 1;
 
+        // todo: potentially write these for the specific buffers rather than the whole thing
+        vk::MemoryBarrier memoryBarrier {
+            .sType = vk::StructureType::eMemoryBarrier,
+            .srcAccessMask = vk::AccessFlagBits::eMemoryWrite,
+            .dstAccessMask = vk::AccessFlagBits::eMemoryRead,
+        };
+
+        // For each sample generate new rays, intersect the geometry, and shade them, potentially storing new color
+        // for (int i = 0; i < 48; i++) {
+            // Generate (missing/new) rays
+            commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, genPipeline);
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, genLayout, 0, genDescriptorSet, nullptr);
+            commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
+
+            commandBuffer.pipelineBarrier(
+               vk::PipelineStageFlagBits::eComputeShader,
+               vk::PipelineStageFlagBits::eComputeShader,
+               vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
+            );
+
+            // Intersect the geometry
+            commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, intPipeline);
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, intLayout, 0, intDescriptorSet, nullptr);
+            commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
+
+            commandBuffer.pipelineBarrier(
+                      vk::PipelineStageFlagBits::eComputeShader,
+                      vk::PipelineStageFlagBits::eComputeShader,
+                      vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
+            );
+
+            // Shade and update rays
+            commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, shadePipeline);
+            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, shadeLayout, 0, shadeDescriptorSet, nullptr);
+            commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
+
+            commandBuffer.pipelineBarrier(
+               vk::PipelineStageFlagBits::eComputeShader,
+               vk::PipelineStageFlagBits::eComputeShader,
+               vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
+            );
+        // }
+
+        // image barrier here?
+
+
+        // Post process the accumulated rays
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, postPipeline);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, postLayout, 0, {postDescriptorSet, frameDescriptorSet[imageIndex]}, nullptr);
+        commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
+
+        commandBuffer.pipelineBarrier(
+           vk::PipelineStageFlagBits::eComputeShader,
+           vk::PipelineStageFlagBits::eComputeShader,
+           vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
+        );
         // Transition the image to a presentable layout (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
         layoutTransition = {
             .sType = vk::StructureType::eImageMemoryBarrier,

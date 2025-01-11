@@ -1,0 +1,4 @@
+#define MAX_BOUNCES 128
+#define EPSILON 0.0001
+#define MAX_BVH_DEPTH 64
+#define SUBDIVISIONS_PER_AXIS 2

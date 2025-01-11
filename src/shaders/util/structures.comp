@@ -1,0 +1,72 @@
+/*
+ * Ray
+ */
+struct Ray {
+    vec3 origin;
+    bool out_of_bounds;
+    vec3 direction;
+    float time;
+    vec3 color;
+    uint count;
+    vec3 light;
+    uint bounce;
+    uint quadrant; // for multisampling
+};
+
+/* AABB node of the BVH tree */
+struct BvhNode {
+    vec3 min;
+    uint idx;
+    vec3 max;
+    uint amt;
+};
+
+/* Material of a Mesh.
+ *
+ * base_color           is the base color of the mesh;
+ * emission             is strenght of the emitted light by the object per channel;
+ * reflectivity         describes how reflective the object is (blends between lambertian and metallic);
+ * roughness            describes how rough the reflective surface is;
+ * is_glass             indicates whether the material will be rendered with a glass shader;
+ * ior                  is the index of refractivity of the glass material, if is_glass is true;         
+ * shaded_smooth        only valid for triangle meshes, determines whether normals are interpolated;
+ */
+struct Material {
+    vec4 base_color;
+    vec4 emission;
+    float reflectivity;
+    float roughness;
+    float ior;
+    bool is_glass;
+    bool shaded_smooth;
+    vec4 motion_blur;
+};
+
+// perf: these triangles are pretty huge.
+// Since if not shaded smooth the normals are ignored, then they can be used to 
+// store 2 triangle per triangle...
+// Or maybe just remove the normals altogether
+struct Triangle {
+    uint material_idx;
+    bool is_sphere;
+    vec3[3] vertices;
+    vec3[3] normals;
+};
+
+/* Record of a ray intersection.
+ *
+ * did_hit      indicates whether an intesection even happened;
+ *              !! If no intersection happened, then the following fields are undefined !!
+ * pos          is the physical location of the intersection;
+ * normal       is the normal vector of the intersected surface;
+ * t            is the value of the parametric variable for the ray equation;
+ * material     is the material of the intersected mesh;
+ */
+struct HitRecord {
+    bool did_hit;
+    bool is_exiting;
+    vec3 pos;
+    vec3 normal;
+    float t;
+    Material material;
+};
