@@ -86,52 +86,50 @@ vk::Sampler createSampler(vk::Device const &device);
 
 vk::CommandBuffer createCommandBuffer(vk::Device const &device, vk::CommandPool const &commandPool);
 
-std::pair<vk::DescriptorSetLayout, vk::DescriptorSet>
-createGenerateDescriptorSet(vk::Device const &device,
-                            vk::DescriptorPool const &pool,
-                            vk::Buffer const &uniformBuffer,
-                            vk::Buffer const &rayBuffer);
+vk::DescriptorSet createGenerateDescriptorSet(vk::Device const &device,
+                                              vk::DescriptorPool const &pool,
+                                              vk::Buffer const &uniformBuffer,
+                                              vk::Buffer const &rayBuffer,
+                                              vk::DescriptorSetLayout &layout);
 
-std::pair<vk::DescriptorSetLayout, vk::DescriptorSet>
-createIntersectDescriptorSet(vk::Device const &device,
-                             vk::DescriptorPool const &pool,
-                             vk::Buffer const &uniformBuffer,
-                             vk::Buffer const &rayBuffer,
-                             vk::Buffer const &hitBuffer,
-                             vk::Buffer const &sceneBuffer,
-                             uint bvhSize,
-                             uint matSize);
+vk::DescriptorSet createIntersectDescriptorSet(vk::Device const &device,
+                                               vk::DescriptorPool const &pool,
+                                               vk::Buffer const &uniformBuffer,
+                                               vk::Buffer const &rayBuffer,
+                                               vk::Buffer const &hitBuffer,
+                                               vk::Buffer const &sceneBuffer,
+                                               uint bvhSize,
+                                               uint matSize,
+                                               vk::DescriptorSetLayout &layout);
 
-std::pair<vk::DescriptorSetLayout, vk::DescriptorSet>
-createShadeDescriptorSet(vk::Device const &device,
-                         vk::DescriptorPool const &pool,
-                         vk::Buffer const &uniformBuffer,
-                         vk::Buffer const &rayBuffer,
-                         vk::Buffer const &sceneBuffer,
-                         vk::Buffer const &hitBuffer,
-                         uint bvhSize,
-                         uint matSize,
-                         vk::ImageView const &accumulatorView,
-                         vk::Sampler sampler);
+vk::DescriptorSet createShadeDescriptorSet(vk::Device const &device,
+                                           vk::DescriptorPool const &pool,
+                                           vk::Buffer const &uniformBuffer,
+                                           vk::Buffer const &rayBuffer,
+                                           vk::Buffer const &sceneBuffer,
+                                           vk::Buffer const &hitBuffer,
+                                           uint bvhSize,
+                                           uint matSize,
+                                           vk::Sampler sampler,
+                                           vk::DescriptorSetLayout &layout);
 
-std::pair<vk::DescriptorSetLayout, vk::DescriptorSet>
-createPostProcessDescriptorSet(vk::Device const &device,
-                               vk::DescriptorPool const &pool,
-                               vk::Buffer const &uniformBuffer,
-                               vk::Buffer const &rayBuffer,
-                               vk::ImageView const &accumulatorView,
-                               vk::Sampler sampler);
+vk::DescriptorSet createPostProcessDescriptorSet(vk::Device const &device,
+                                                 vk::DescriptorPool const &pool,
+                                                 vk::Buffer const &uniformBuffer,
+                                                 vk::Buffer const &rayBuffer,
+                                                 vk::Sampler sampler,
+                                                 vk::DescriptorSetLayout &layout);
 
-std::pair<vk::DescriptorSetLayout, std::vector<vk::DescriptorSet>>
-createFramebufferDescriptorSets(vk::Device const &device,
-                                vk::DescriptorPool const &pool,
-                                std::vector<vk::ImageView> &swapchainViews,
-                                vk::Sampler sampler);
+std::vector<vk::DescriptorSet> createFramebufferDescriptorSets(vk::Device const &device,
+                                                               vk::DescriptorPool const &pool,
+                                                               std::vector<vk::ImageView> &swapchainViews,
+                                                               vk::Sampler sampler,
+                                                               vk::DescriptorSetLayout &layout);
 
-std::pair<vk::Pipeline, vk::PipelineLayout> createComputePipeline(vk::Device const &device,
-                                                                  std::vector<vk::DescriptorSetLayout> const &descriptorSetLayouts,
-                                                                  std::string const &shaderPath,
-                                                                  std::string const &entrypoint);
+vk::Pipeline createComputePipeline(vk::Device const &device,
+                                   std::vector<vk::DescriptorSetLayout> const &descriptorSetLayouts,
+                                   std::string const &shaderPath,
+                                   vk::PipelineLayout &layout);
 
 vk::DescriptorPool createDescriptorPool(vk::Device const &device, size_t swapchainSize);
 

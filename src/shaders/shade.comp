@@ -31,8 +31,6 @@ layout(std430, set = 0, binding = 3) readonly buffer HitBuffer {
     HitRecord records[];
 } hitbuffer;
 
-layout(set = 0, binding = 4, rgba8) uniform image2D accumulator;
-
 vec3 background_color(Ray ray) {
     float blend = 0.5 * ray.direction.y + 0.5;
     return mix(vec3(0.6, 0.8, 1.0), vec3(0.2, 0.4, 1.0), blend);

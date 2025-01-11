@@ -24,8 +24,6 @@ layout(std430, set = 0, binding = 1) buffer RayBuffer {
     Ray rays[];
 } raybuffer;
 
-layout(set = 0, binding = 2, rgba8) uniform image2D accumulator;
-
 layout(set = 1, binding = 0) writeonly uniform image2D framebuffer;
 
 vec4 gamma_correction(vec4 color) {

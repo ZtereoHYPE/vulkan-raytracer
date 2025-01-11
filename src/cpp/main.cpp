@@ -95,43 +95,28 @@ class RayTracerProgram {
         this->sceneMemoryMap = sceneMemoryMap;
 
         // todo: triple check this math
-        size_t rayBufferSize = swapChainExtent.width * swapChainExtent.height * 24 * 24;
-        size_t hitBufferSize = swapChainExtent.width * swapChainExtent.height * 172 * 24;
+        size_t rayBufferSize = swapChainExtent.width * swapChainExtent.height * 24 * 8;
+        size_t hitBufferSize = swapChainExtent.width * swapChainExtent.height * 172 * 8;
         auto [rayBuffer, rayMemory] = createBuffer(physicalDevice, device, rayBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
         auto [hitBuffer, hitMemory] = createBuffer(physicalDevice, device, hitBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-        auto [accumulatorImage, accumulatorView, accumulatorMemory] = createImage(physicalDevice, device, swapChainExtent, vk::Format::eR8G8B8A8Unorm);
-        transitionImageLayout(device, computeCommandPool, computeQueue, accumulatorImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
 
 
         // Descriptor sets and pipeline creation
         vk::DescriptorPool descriptorPool = createDescriptorPool(device, (size_t) swapChainImageViews.size());
         vk::Sampler sampler = createSampler(device);
 
-        auto [genDescrLayout, genDescrSet] = createGenerateDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer);
-        auto [intDescrLayout, intDescrSet] = createIntersectDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, hitBuffer, sceneBuffer, bvhSize, matSize);
-        auto [shadeDescrLayout, shadeDescrSet] = createShadeDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, sceneBuffer, hitBuffer, bvhSize, matSize, accumulatorView, sampler);
-        auto [postDescrLayout, postDescrSet] = createPostProcessDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, accumulatorView, sampler);
-        auto [frameDescrLayout, frameDescrSets] = createFramebufferDescriptorSets(device, descriptorPool, swapChainImageViews, sampler);
-        this->genDescriptorSet = genDescrSet;
-        this->intDescriptorSet = intDescrSet;
-        this->shadeDescriptorSet = shadeDescrSet;
-        this->postDescriptorSet = postDescrSet;
-        this->frameDescriptorSet = frameDescrSets;
+        vk::DescriptorSetLayout genDescrLayout, intDescrLayout, shadeDescrLayout, postDescrLayout, frameDescrLayout;
 
-        auto [genPipeline, genLayout] = createComputePipeline(device, {genDescrLayout}, "build/shaders/generate.comp.spv", "main"); // todo: move main in function
-        auto [intPipeline, intLayout] = createComputePipeline(device, {intDescrLayout}, "build/shaders/intersect.comp.spv", "main");
-        auto [shadePipeline, shadeLayout] = createComputePipeline(device, {shadeDescrLayout}, "build/shaders/shade.comp.spv", "main");
-        auto [postPipeline, postLayout] = createComputePipeline(device, {postDescrLayout, frameDescrLayout}, "build/shaders/postprocess.comp.spv", "main");
-        this->genPipeline = genPipeline;
-        this->intPipeline = intPipeline;
-        this->shadePipeline = shadePipeline;
-        this->postPipeline = postPipeline;
-        this->genLayout = genLayout;
-        this->intLayout = intLayout;
-        this->shadeLayout = shadeLayout;
-        this->postLayout = postLayout;
+        genDescriptorSet = createGenerateDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, genDescrLayout);
+        intDescriptorSet = createIntersectDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, hitBuffer, sceneBuffer, bvhSize, matSize, intDescrLayout);
+        shadeDescriptorSet = createShadeDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, sceneBuffer, hitBuffer, bvhSize, matSize, sampler, shadeDescrLayout);
+        postDescriptorSet = createPostProcessDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, sampler, postDescrLayout);
+        frameDescriptorSet = createFramebufferDescriptorSets(device, descriptorPool, swapChainImageViews, sampler, frameDescrLayout);
 
+        genPipeline = createComputePipeline(device, {genDescrLayout}, "build/shaders/generate.comp.spv", genLayout); // todo: move main in function
+        intPipeline = createComputePipeline(device, {intDescrLayout}, "build/shaders/intersect.comp.spv", intLayout);
+        shadePipeline = createComputePipeline(device, {shadeDescrLayout}, "build/shaders/shade.comp.spv", shadeLayout);
+        postPipeline = createComputePipeline(device, {postDescrLayout, frameDescrLayout}, "build/shaders/postprocess.comp.spv", postLayout);
 
         // Synchronization structure initialization
         vk::SemaphoreCreateInfo semaphoreInfo {
