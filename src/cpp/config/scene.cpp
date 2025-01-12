@@ -21,7 +21,7 @@ glm::vec3 Triangle::maxBound() const {
 
 /* EXAMPLE CONFIG:
  *
- *  version: 0.1
+ *  version: 0.2
  * 
  *  camera:
  *    resolution: [300, 400]
@@ -82,8 +82,6 @@ CameraControlsUniform Scene::getCameraControls() {
 
 void Scene::validateFile() {
     typedef std::string str;
-
-    sizeof(Material);
 
     // check the version is correct
     if (root["version"].as<str>() != CONFIG_VERSION) {

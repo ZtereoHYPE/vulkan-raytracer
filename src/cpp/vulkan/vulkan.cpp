@@ -2,17 +2,6 @@
 
 using namespace vk;
 
-/* Vulkan parameters
- *
- * USE_LLVMPIPE forces the rendering to happen on the CPU
- * VALIDATION_LAYERS_ENABLE enables vulkan validation layers 
- */
-constexpr bool USE_LLVMPIPE = false;
-constexpr bool VALIDATION_LAYERS_ENABLE = true;
-
-// add "VK_LAYER_LUNARG_api_dump" to dump Vulkan calls in stdout
-// add "VK_LAYER_PRINTF_ONLY_PRESET" to allow printf in shaders for renderdoc
-const std::vector validationLayers = {"VK_LAYER_KHRONOS_validation"};
 const std::vector deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 /**
@@ -71,8 +60,8 @@ Instance createInstance() {
     auto requiredExtensions = Window::getRequiredExtensions();
 
     // validation layers
-    if (VALIDATION_LAYERS_ENABLE) {
-        if (!allValidationLayersSupported(validationLayers)) {
+    if (params.USE_VALIDATION_LAYERS) {
+        if (!allValidationLayersSupported(params.VALIDATION_LAYERS)) {
             throw std::runtime_error("Some validation layers needed aren't supported");
         }
         requiredExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -90,8 +79,8 @@ Instance createInstance() {
     InstanceCreateInfo createInfo {
         .sType = StructureType::eInstanceCreateInfo,
         .pApplicationInfo = &appInfo,
-        .enabledLayerCount = static_cast<uint32_t>(validationLayers.size()),
-        .ppEnabledLayerNames = validationLayers.data(),
+        .enabledLayerCount = static_cast<uint32_t>(params.VALIDATION_LAYERS.size()),
+        .ppEnabledLayerNames = params.VALIDATION_LAYERS.data(),
         .enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size()),
         .ppEnabledExtensionNames = requiredExtensions.data(),
     };
@@ -135,7 +124,7 @@ bool allValidationLayersSupported(const std::vector<const char*>& validationLaye
  * Creates a debug messenger and configures it to show detailed errors 
  */
 DebugUtilsMessengerEXT setupDebugMessenger(Instance const &instance) {
-    if constexpr (!VALIDATION_LAYERS_ENABLE) return nullptr;
+    if (!params.USE_VALIDATION_LAYERS) return nullptr;
 
     using severity = DebugUtilsMessageSeverityFlagBitsEXT;
     using type = DebugUtilsMessageTypeFlagBitsEXT;
@@ -269,9 +258,9 @@ int getDeviceScore(PhysicalDevice const &device, SurfaceKHR const &surface) {
     const QueueFamilyIndices indices = findQueueFamilies(device, surface);
     const bool queuesInSameFamily = !indices.areDifferent();
 
-    // if we need LLVMpipe then it gets the highest priority
+    // if we need to use llvmpipe then finding it has positive value, else negative value
     const bool isLlvmpipe = std::string(properties.deviceName).find("llvmpipe") != std::string::npos;
-    constexpr int llvmpipeScore = USE_LLVMPIPE ? 100 : -100; // if we use llvmpipe then it has positive, else negative value
+    const int llvmpipeScore = params.USE_LLVMPIPE ? 100 : -100;
 
     const int score = isLlvmpipe * llvmpipeScore + isDiscrete * 10 + queuesInSameFamily * 1;
 
@@ -337,8 +326,8 @@ Device createLogicalDevice(PhysicalDevice const &physicalDevice, QueueFamilyIndi
         .sType = StructureType::eDeviceCreateInfo,
         .queueCreateInfoCount = static_cast<uint32_t>(uniqueQueueFamilies.size()),
         .pQueueCreateInfos = queueCreateInfos.data(),
-        .enabledLayerCount = static_cast<uint32_t>(validationLayers.size()),
-        .ppEnabledLayerNames = validationLayers.data(),
+        .enabledLayerCount = static_cast<uint32_t>(params.VALIDATION_LAYERS.size()),
+        .ppEnabledLayerNames = params.VALIDATION_LAYERS.data(),
         .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
         .ppEnabledExtensionNames = deviceExtensions.data(),
         .pEnabledFeatures = {},

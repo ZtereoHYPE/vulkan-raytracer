@@ -7,6 +7,7 @@
 
 #include "../util/util.hpp"
 #include "../window.hpp"
+#include "../config/parameters.hpp"
 
 /* 
  * Helper struct representing various supported formats by the SwapChain 

@@ -44,7 +44,7 @@ class BufferBuilder {
         // this is a GCC-ism.
         memcpy(tmpBuffer + currentOffset, &value, sizeof(T));
         currentOffset += size;
-    };
+    }
 
     size_t getOffset();
 

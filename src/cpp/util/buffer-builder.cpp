@@ -1,6 +1,6 @@
 #include "buffer-builder.hpp"
 
-const size_t INITIAL_SIZE = 16;
+consteval size_t INITIAL_SIZE = 16;
 
 void BufferBuilder::growTmpBuffer() {
     currentSize *= 2;

@@ -1,7 +1,5 @@
 #include "main.hpp"
 
-const int TILE_SIZE = 8;
-
 class RayTracerProgram {
    public:
     void run() {
@@ -11,7 +9,7 @@ class RayTracerProgram {
     }
 
    private:
-    Scene scene{ "scenes/utah.yaml" };
+    Scene scene{ params.SCENE_FILE };
     Window window{ 
         "Vulkan RayTracer", 
         scene.getCameraControls().resolution[0], 
@@ -252,8 +250,8 @@ class RayTracerProgram {
         );
 
         // todo calculate the bounds better: this dispatches an extra unit row when width % TILE_SIZE == 0
-        size_t dispatchWidth = swapChainExtent.width / TILE_SIZE + 1;
-        size_t dispatchHeight = swapChainExtent.height / TILE_SIZE + 1;
+        size_t dispatchWidth = swapChainExtent.width / params.TILE_SIZE + 1;
+        size_t dispatchHeight = swapChainExtent.height / params.TILE_SIZE + 1;
 
         // todo: potentially write these for the specific buffers rather than the whole thing
         vk::MemoryBarrier memoryBarrier {

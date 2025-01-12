@@ -1,6 +1,4 @@
 #include "bvh.hpp"
-#include <iterator>
-#include <algorithm>
 
 float axisMin(Triangle tri, size_t axis) {
     float min = tri.vertices[0][axis];
@@ -70,7 +68,7 @@ void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint 
     // Initialize the node's data.
     bvhList[nodeIdx].initialize(triangles, indices, offset);
 
-    if (depth >= BHV_MAX_DEPTH || indices.size() <= 1) return;
+    if (depth >= params.MAX_BVH_DEPTH || indices.size() <= 1) return;
 
     auto [splitAxis, splitPos] = findBestSplit(nodeIdx, indices);
     float bestCost = splitCost(indices, splitAxis, splitPos);
@@ -117,14 +115,14 @@ std::tuple<size_t, float> BvhBuilder::findBestSplit(uint nodeIdx, std::span<uint
     // Get the node's AABB information
     BvhNode node = bvhList[nodeIdx];
     glm::vec3 startPos = node.min;
-    glm::vec3 dimentions = (node.max - node.min) / (SPLIT_ATTEMPTS + 1);
+    glm::vec3 dimentions = (node.max - node.min) / (params.BVH_SPLIT_ATTEMPTS + 1);
 
     // Use the SAH to find the best split position by trying to split at SPLIT_ATTEMPT uniform intervals
     size_t bestAxis = -1;
     float bestPos;
     float bestCost = 1e30;
     for (size_t axis : {0, 1, 2}) {
-        if (SPLIT_ATTEMPTS == -1) {
+        if (params.BVH_SPLIT_ATTEMPTS == -1) {
             // Try at every possible position
             for (uint triIdx : indices) {
                 Triangle tri = triangles[triIdx];
@@ -139,7 +137,7 @@ std::tuple<size_t, float> BvhBuilder::findBestSplit(uint nodeIdx, std::span<uint
             }
         } else {
             // Try SPLIT_ATTEMPTS splits and pick the best
-            for (uint attempt = 1; attempt <= SPLIT_ATTEMPTS; ++attempt) {
+            for (uint attempt = 1; attempt <= params.BVH_SPLIT_ATTEMPTS; ++attempt) {
                 float pos = startPos[axis] + dimentions[axis] * attempt;
                 float cost = splitCost(indices, axis, pos);
 

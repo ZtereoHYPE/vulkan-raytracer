@@ -1,0 +1,18 @@
+# WARNING: Some of these parameters need the shaders parameters to be tweaked accordingly.
+#          Please update the appropriate parameters in /shaders/util/parameters.comp
+
+# General parameters
+scene_file: "scenes/benchmark.yaml"   # file from which the scene will be loaded
+tile_size: 8                          # size of tiles used for rendering.
+
+# Vulkan parameters
+use_llvmpipe: false                   # forces the rendering to happen on the CPU
+use_validation_layers: true           # enables vulkan validation layers
+validation_layers:                    # list of enabled validation layers
+  - "VK_LAYER_KHRONOS_validation"     #  - standard error checking
+  #- "VK_LAYER_LUNARG_api_dump"       #  - dump in stdout API calls
+
+# BVH parameters
+max_bvh_depth: 64                     # maximum depth of the tree
+bvh_split_attempts: 8                 # amount of splits performed to find the optimal BVH.
+                                      #  set to -1 to attempt all possible splits.

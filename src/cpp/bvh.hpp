@@ -4,9 +4,8 @@
 
 #include "config/scene.hpp"
 #include "util/util.hpp"
+#include "config/parameters.hpp"
 
-const uint BHV_MAX_DEPTH = 64;
-const int SPLIT_ATTEMPTS = 8; // set to -1 for trying at every possible position
 const glm::vec3 MAX_VAL = glm::vec3(1e30, 1e30, 1e30);
 const glm::vec3 MIN_VAL = glm::vec3(-1e30, -1e30, -1e30);
 

@@ -11,4 +11,5 @@
 #include "util/util.hpp"
 #include "util/buffer-builder.hpp"
 #include "config/scene.hpp"
+#include "config/parameters.hpp"
 
