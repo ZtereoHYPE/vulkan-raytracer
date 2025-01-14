@@ -96,7 +96,6 @@ class RayTracerProgram {
         size_t hitBufferSize = swapChainExtent.width * swapChainExtent.height * 120; // size of hit record
         auto [rayBuffer, rayMemory] = createBuffer(physicalDevice, device, rayBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
         auto [hitBuffer, hitMemory] = createBuffer(physicalDevice, device, hitBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
-        clearBuffer(device, commandPool, computeQueue, rayBuffer, rayBufferSize); // clear ray buffer
 
 
         // Descriptor sets and pipeline creation
@@ -135,7 +134,6 @@ class RayTracerProgram {
     } catch (std::runtime_error &) {
         // error handler
         std::cout << "A runtime error occurred! The program will now terminate" << std::endl;
-
         throw; // rethrow to halt execution
     }
 

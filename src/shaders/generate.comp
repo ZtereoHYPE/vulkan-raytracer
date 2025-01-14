@@ -24,6 +24,18 @@ layout(std430, set = 0, binding = 1) buffer RayBuffer {
     Ray rays[];
 } raybuffer;
 
+/* Helper function to clear the buffer on first run */
+void clear(out Ray ray) {
+    ray.origin = vec3(0);
+    ray.out_of_bounds = false;
+    ray.direction = vec3(0);
+    ray.time = 0;
+    ray.color = vec3(0);
+    ray.count = 0;
+    ray.light = vec3(0);
+    ray.bounce = 0;
+}
+
 /*
  * Generate rays given a coordinate.
  *
@@ -74,6 +86,9 @@ void main() {
     if (coordinates.x < size.x && coordinates.y < size.y) {
         seed = uint(coordinates.x + camera.resolution.x * coordinates.y + camera.frame * camera.resolution.y * camera.resolution.x);
         uint idx = coordinates.x + coordinates.y * size.x;
+
+        if (camera.frame == 0)
+            clear(raybuffer.rays[idx]);
 
         // generate the missing / out of bounds rays
         if (raybuffer.rays[idx].out_of_bounds)
