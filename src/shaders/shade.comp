@@ -37,7 +37,7 @@ vec3 background_color(Ray ray) {
 //    return vec3(0);
 }
 
-// Schlick approximation of Fresnel on glass
+// Schlick approximation of Fresnel for glass
 float schlick_reflectance(float cos_angle, float ior) {
     float r0 = (1 - ior) / (1 + ior);
     r0 = r0 * r0;
@@ -59,7 +59,6 @@ void glass_shader(inout Ray ray, HitRecord hit) {
     }
 
     float cos_angle = min(dot(-dir, normal), 1.0);
-    //float sin_angle = sqrt(1 - cos_angle * cos_angle); // todo: faster sin algos? len(cross
     float sin_angle = length(cross(-dir, normal));
 
     bool total_reflection = ior_ratio * sin_angle > 1;
@@ -131,28 +130,29 @@ void illuminate_ray(inout Ray ray, HitRecord hit) {
 
     } else {
         absorbed_light = background_color(ray) * ray.color;
-        ray.out_of_bounds = true;
+        ray.oob_quadrant |= 1u; // set the first bit to 1
     }
 
     ray.bounce++;
     ray.light += absorbed_light / float(ray.count + 1);
 
     if (ray.bounce > MAX_BOUNCES)
-        ray.out_of_bounds = true;
+        ray.oob_quadrant |= 1u; // set the first bit to 1
 }
 
 /* Entrypoint */
 void main() {
     ivec2 coordinates = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = ivec2(camera.resolution);
-    uint idx = coordinates.x + coordinates.y * size.x;
 
     if (coordinates.x < size.x && coordinates.y < size.y) {
+        uint idx = coordinates.x + coordinates.y * size.x;
         seed = uint(coordinates.x + size.x * coordinates.y + camera.frame * camera.resolution.y * camera.resolution.x);
 
         Ray ray = raybuffer.rays[idx];
         HitRecord hit = hitbuffer.records[idx];
         illuminate_ray(ray, hit);
+
         // update the ray information for the next bounce
         raybuffer.rays[idx] = ray;
     }

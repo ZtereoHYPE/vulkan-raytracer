@@ -20,7 +20,7 @@ layout(std430, set = 0, binding = 0) uniform Camera {
     mat4 rotation;
 } camera;
 
-layout(std430, set = 0, binding = 1) buffer RayBuffer {
+layout(std430, set = 0, binding = 1) readonly buffer RayBuffer {
     Ray rays[];
 } raybuffer;
 
@@ -34,13 +34,12 @@ vec4 gamma_correction(vec4 color) {
 void main() {
     ivec2 coordinates = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = ivec2(camera.resolution);
-    uint idx = coordinates.x + coordinates.y * size.x;
 
     if (coordinates.x < size.x && coordinates.y < size.y) {
+        uint idx = coordinates.x + coordinates.y * size.x;
         imageStore(framebuffer, coordinates, gamma_correction(vec4(raybuffer.rays[idx].light, 1)));
 
-        // this shows the amount of fired rays for the given pixel
-//        imageStore(framebuffer, coordinates, gamma_correction(vec4(float(raybuffer.rays[idx].time) / float(4))));
+//        imageStore(framebuffer, coordinates, gamma_correction(vec4((raybuffer.rays[idx].oob_quadrant >> 1) / 4.0)));
     }
 }
 

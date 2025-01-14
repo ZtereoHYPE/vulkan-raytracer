@@ -1,16 +1,17 @@
 /*
  * Ray
+ *
+ * The packing was performed to keep the ray within a signle 64-bit cacheline.
  */
 struct Ray {
     vec3 origin;
-    bool out_of_bounds;
+    uint oob_quadrant; // least sig. bit is oob; next bits are quadrant
     vec3 direction;
     float time;
     vec3 color;
     uint count;
     vec3 light;
     uint bounce;
-    uint quadrant; // for multisampling
 };
 
 /* AABB node of the BVH tree */

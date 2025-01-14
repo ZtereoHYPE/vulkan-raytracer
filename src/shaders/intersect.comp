@@ -10,6 +10,7 @@
 
 // todo: experiment with different kernel sizes for different stages
 layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
 layout(std430, set = 0, binding = 0) uniform Camera {
     uvec2 resolution;
     vec2 uv;
@@ -259,9 +260,9 @@ HitRecord hit_meshes(Ray ray) {
 void main() {
     ivec2 coordinates = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = ivec2(camera.resolution); // todo: figure out how to get resolution
-    uint idx = coordinates.x + coordinates.y * size.x;
 
     if (coordinates.x < size.x && coordinates.y < size.y) {
+        uint idx = coordinates.x + coordinates.y * size.x;
         seed = uint(coordinates.x + size.x * coordinates.y + camera.frame * camera.resolution.y * camera.resolution.x);
 
         Ray ray = raybuffer.rays[idx];

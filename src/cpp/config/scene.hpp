@@ -6,7 +6,8 @@
 #include <iostream>
 #include <cmath>
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#define GLM_ENABLE_EXPERIMENTAL // for euler angles
+#include <glm/gtx/euler_angles.hpp>
 
 #include "../util/buffer-builder.hpp"
 #include "../bvh.hpp"

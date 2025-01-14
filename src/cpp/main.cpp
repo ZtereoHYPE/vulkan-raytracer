@@ -92,9 +92,8 @@ class RayTracerProgram {
         auto [sceneBuffer, sceneMemory, sceneMemoryMap] = createMappedBuffer(physicalDevice, device, bvhSize + matSize + triSize, vk::BufferUsageFlagBits::eStorageBuffer);
         this->sceneMemoryMap = sceneMemoryMap;
 
-        // todo: triple check this math
-        size_t rayBufferSize = swapChainExtent.width * swapChainExtent.height * 24 * 8;
-        size_t hitBufferSize = swapChainExtent.width * swapChainExtent.height * 172 * 8;
+        size_t rayBufferSize = swapChainExtent.width * swapChainExtent.height * 64; // size of ray
+        size_t hitBufferSize = swapChainExtent.width * swapChainExtent.height * 120; // size of hit record
         auto [rayBuffer, rayMemory] = createBuffer(physicalDevice, device, rayBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
         auto [hitBuffer, hitMemory] = createBuffer(physicalDevice, device, hitBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
@@ -115,6 +114,7 @@ class RayTracerProgram {
         intPipeline = createComputePipeline(device, {intDescrLayout}, "build/shaders/intersect.comp.spv", intLayout);
         shadePipeline = createComputePipeline(device, {shadeDescrLayout}, "build/shaders/shade.comp.spv", shadeLayout);
         postPipeline = createComputePipeline(device, {postDescrLayout, frameDescrLayout}, "build/shaders/postprocess.comp.spv", postLayout);
+
 
         // Synchronization structure initialization
         vk::SemaphoreCreateInfo semaphoreInfo {
@@ -221,7 +221,6 @@ class RayTracerProgram {
         });
 
         // Transition the layout of the image to one compute shaders can output to (VK_IMAGE_LAYOUT_GENERAL)
-        // todo: this ideally happens before waiting for the fence, or the fence shouldn't exist at all
         vk::ImageMemoryBarrier layoutTransition = {
             .sType = vk::StructureType::eImageMemoryBarrier,
             // https://themaister.net/blog/2019/08/14/yet-another-blog-explaining-vulkan-synchronization/
@@ -249,7 +248,6 @@ class RayTracerProgram {
             layoutTransition
         );
 
-        // todo calculate the bounds better: this dispatches an extra unit row when width % TILE_SIZE == 0
         size_t dispatchWidth = swapChainExtent.width / params.TILE_SIZE + 1;
         size_t dispatchHeight = swapChainExtent.height / params.TILE_SIZE + 1;
 
@@ -260,55 +258,46 @@ class RayTracerProgram {
             .dstAccessMask = vk::AccessFlagBits::eMemoryRead,
         };
 
-        // For each sample generate new rays, intersect the geometry, and shade them, potentially storing new color
-        // for (int i = 0; i < 48; i++) {
-            // Generate (missing/new) rays
-            commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, genPipeline);
-            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, genLayout, 0, genDescriptorSet, nullptr);
-            commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
+        // Generate (missing/new) rays
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, genPipeline);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, genLayout, 0, genDescriptorSet, nullptr);
+        commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
 
-            commandBuffer.pipelineBarrier(
-               vk::PipelineStageFlagBits::eComputeShader,
-               vk::PipelineStageFlagBits::eComputeShader,
-               vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
-            );
+        commandBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
+        );
 
-            // Intersect the geometry
-            commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, intPipeline);
-            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, intLayout, 0, intDescriptorSet, nullptr);
-            commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
+        // Intersect the geometry
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, intPipeline);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, intLayout, 0, intDescriptorSet, nullptr);
+        commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
 
-            commandBuffer.pipelineBarrier(
-                      vk::PipelineStageFlagBits::eComputeShader,
-                      vk::PipelineStageFlagBits::eComputeShader,
-                      vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
-            );
+        commandBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
+        );
 
-            // Shade and update rays
-            commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, shadePipeline);
-            commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, shadeLayout, 0, shadeDescriptorSet, nullptr);
-            commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
+        // Shade and update rays
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, shadePipeline);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, shadeLayout, 0, shadeDescriptorSet, nullptr);
+        commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
 
-            commandBuffer.pipelineBarrier(
-               vk::PipelineStageFlagBits::eComputeShader,
-               vk::PipelineStageFlagBits::eComputeShader,
-               vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
-            );
-        // }
+        commandBuffer.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
+        );
+
 
         // image barrier here?
-
-
         // Post process the accumulated rays
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, postPipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, postLayout, 0, {postDescriptorSet, frameDescriptorSet[imageIndex]}, nullptr);
         commandBuffer.dispatch(dispatchWidth, dispatchHeight, 1);
 
-        commandBuffer.pipelineBarrier(
-           vk::PipelineStageFlagBits::eComputeShader,
-           vk::PipelineStageFlagBits::eComputeShader,
-           vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
-        );
         // Transition the image to a presentable layout (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
         layoutTransition = {
             .sType = vk::StructureType::eImageMemoryBarrier,
@@ -332,8 +321,7 @@ class RayTracerProgram {
         computeCommandBuffer.pipelineBarrier(
             vk::PipelineStageFlagBits::eComputeShader,
             vk::PipelineStageFlagBits::eBottomOfPipe,
-            vk::DependencyFlags(0), nullptr, nullptr,
-            layoutTransition
+            vk::DependencyFlags(0), memoryBarrier, nullptr,layoutTransition
         );
 
         commandBuffer.end();

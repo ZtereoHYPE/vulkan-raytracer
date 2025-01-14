@@ -30,7 +30,7 @@ Ray generate_ray(vec2 frag_coord, Ray ray) {
     if (camera.frame == 0) {
         ray.light = vec3(0);
         ray.count = 1;
-        ray.quadrant = 0;
+        ray.oob_quadrant = 0;
     } else {
         ray.light *= float(ray.count) / float(ray.count + 1);
         ray.count++; // increment the amount of rays that passed thru this pixel
@@ -46,19 +46,20 @@ Ray generate_ray(vec2 frag_coord, Ray ray) {
     vec3 viewport_origin = vec3(-focus_plane_uv.x/2, focus_plane_uv.y/2, camera.focus_distance) + // Top left of focus plane
                            vec3(pixel_delta/2, 0);  // Center the pixel
 
-    vec3 pixel_coords = viewport_origin + 
-                        vec3(pixel_delta * (frag_coord + pixel_offset(seed, ray.quadrant)), 0); // Jitter for anti-aliasing
+    uint quadrant = ray.oob_quadrant >> 1;
+    vec3 pixel_coords = viewport_origin +
+                        vec3(pixel_delta * (frag_coord + pixel_offset(seed, quadrant)), 0); // Jitter for anti-aliasing
 
     vec3 aperture_offset = vec3(random_disc(seed), 0) * camera.aperture_radius;
 
     // Vector from origin to pixel, rotated
     vec3 ray_direction = mat3(camera.rotation) * normalize(pixel_coords - aperture_offset);
 
-    // Rotated aperture offset, shifted by camera origin 
+    // Rotated aperture offset, shifted by camera origin
     vec3 ray_origin = (mat3(camera.rotation) * aperture_offset) + camera.origin.xyz;
 
     ray.origin = ray_origin;
-    ray.out_of_bounds = false;
+    ray.oob_quadrant = quadrant << 1; // set the least sig. bit to 0, and then the quadrant
     ray.direction = ray_direction;
     ray.time = pgc_random(seed);
     ray.color = vec3(1); // initialize the ray as white
@@ -71,14 +72,13 @@ Ray generate_ray(vec2 frag_coord, Ray ray) {
 void main() {
     ivec2 coordinates = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = ivec2(camera.resolution);
-    uint idx = coordinates.x + coordinates.y * size.x;
 
     if (coordinates.x < size.x && coordinates.y < size.y) {
+        uint idx = coordinates.x + coordinates.y * size.x;
         seed = uint(coordinates.x + camera.resolution.x * coordinates.y + camera.frame * camera.resolution.y * camera.resolution.x);
 
         // generate the missing / out of bounds rays
-        if (raybuffer.rays[idx].out_of_bounds) {
+        if ((raybuffer.rays[idx].oob_quadrant & 1u) == 1u)
             raybuffer.rays[idx] = generate_ray(coordinates, raybuffer.rays[idx]);
-        }
     }
 }
