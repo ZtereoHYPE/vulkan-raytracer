@@ -8,6 +8,7 @@
 #include "util/random.comp"
 
 layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
 layout(std430, set = 0, binding = 0) uniform Camera {
     uvec2 resolution;
     vec2 uv;
@@ -20,7 +21,7 @@ layout(std430, set = 0, binding = 0) uniform Camera {
 } camera;
 
 layout(std430, set = 0, binding = 1) readonly buffer MaterialBuffer {
-    Material get[]; // this makes the syntax a bit more readable: materials.get[3]
+    Material get[];
 } materials;
 
 layout(std430, set = 0, binding = 2) buffer RayBuffer {
@@ -31,25 +32,45 @@ layout(std430, set = 0, binding = 3) readonly buffer HitBuffer {
     HitRecord records[];
 } hitbuffer;
 
+/*
+ * Returns the background color if a ray doesn't hit any mesh.
+ * By default, it's a gradient from two blue-ish colors simulating a sky.
+ */
 vec3 background_color(Ray ray) {
     float blend = 0.5 * ray.direction.y + 0.5;
     return mix(vec3(0.6, 0.8, 1.0), vec3(0.2, 0.4, 1.0), blend);
-//    return vec3(0);
 }
 
-// Schlick approximation of Fresnel for glass
+/*
+ * Schlick's approximation of the Fresnel effect for glass.
+ * Approximates the increased reflectivity of glass when seen from a grazing angle.
+ */
 float schlick_reflectance(float cos_angle, float ior) {
     float r0 = (1 - ior) / (1 + ior);
     r0 = r0 * r0;
     return r0 + (1 - r0) * pow((1 - cos_angle), 5);
 }
 
-// this does not handle intersecting spheres gracefully, the ratios must be pre-divided for that
+/*
+ * Glass shader that uses Snell's law to render materials based on their IOR.
+ *
+ * The code calculates the resulting vector by splitting in parallel and perpendicular
+ * components to the surface.
+ * The parallel component is obtained by first projecting the vector on the surface by adding
+ * adding the normal scaled by the dot with the normal, and then by scaling it again with the
+ * IOR ratios since this component represents the sine of the resulting angle.
+ * The perpendicular component can then be just caluclated by using the trig. identity and
+ * scaling -<surface normal> accordingly.
+ *
+ * A limitation with this shader is that it does not handle intersecting geometry, meaning
+ * that IORs must be pre-divided if a glass mesh is rendered within another glass mesh.
+ */
 void glass_shader(inout Ray ray, HitRecord hit) {
     vec3 normal = hit.normal;
     vec3 dir = ray.direction;
     
-    // Check if we're entering or exiting the glass
+    // Check if we're entering or exiting the glass and adapt the IOR accordingly.
+    // This assumes that the current environment has an IOR of 1.
     float ior_ratio;
     if (hit.is_exiting) {
         ior_ratio = hit.material.ior;
@@ -58,34 +79,42 @@ void glass_shader(inout Ray ray, HitRecord hit) {
         ior_ratio = 1.0 / hit.material.ior;
     }
 
+    // Obtain angle between -direction and normal
     float cos_angle = min(dot(-dir, normal), 1.0);
     float sin_angle = length(cross(-dir, normal));
 
+    // At a certain grazing angle, the light gets fully reflected
     bool total_reflection = ior_ratio * sin_angle > 1;
     bool schlick_reflection = pgc_random(seed) < schlick_reflectance(cos_angle, ior_ratio);
 
-    // Check if we should reflect or refract
     vec3 out_dir;
     if (total_reflection || schlick_reflection) {
+        // If a total reflection or a random schlick reflectance happened, reflect the ray
         out_dir = dir - 2 * dot(dir, normal) * normal;
 
     } else {
-        vec3 refracted_ort = ior_ratio * (dir + cos_angle * normal);
-
-        float ort_len = length(refracted_ort);
-        vec3 refracted_par = -sqrt(1 - ort_len * ort_len) * normal;
+        // Else, calculate the parallel and orthogonal components of the refraction to the surface
+        vec3 refracted_par = ior_ratio * (dir + cos_angle * normal);
+        float ort_len = length(refracted_par);
+        vec3 refracted_ort = -sqrt(1 - ort_len * ort_len) * normal;
 
         out_dir = refracted_ort + refracted_par;
     }
 
-    // apply fuzziness
+    // Apply fuzziness if glass is rough
     out_dir = normalize(out_dir + random_unit_vector(seed) * hit.material.roughness / 2);
 
     ray.direction = out_dir;
     ray.origin = hit.pos;
 }
 
-// cosine-weighted lambertian lighting
+/*
+ * Cosine-weighted lambertian shader.
+ *
+ * The rays are reflected in a random direction in the "normal hemisphere" of
+ * the surface, but the random distribution is cosine-weighted simulating a
+ * stronger light if the incoming light is perpendicular to the surface.
+ */
 void weighted_lambertian_shader(inout Ray ray, HitRecord hit) {
     ray.origin = hit.pos;
 
@@ -102,18 +131,20 @@ void weighted_lambertian_shader(inout Ray ray, HitRecord hit) {
     }
 }
 
+/*
+ * The ray only gets light when it hits something emissive.
+ * The light that will be "received" from the emissive object
+ * will be tinted multiplicatively by all the surfaces the ray
+ * hits before reaching the camera.
+ * If the ray encounters multiple source of light, all of them
+ * will contribute to the light value of the pixel.
+ *
+ * The result is that we only add light to incoming_light when
+ * we hit an emissive, and we tint that light to the color that
+ * the ray has assumed so far, simulating the light bouncing back
+ * to the camera.
+ */
 void illuminate_ray(inout Ray ray, HitRecord hit) {
-    /*  The ray only gets light when it hits something emissive.
-        The light that will be "received" from the emissive object
-         will be tinted multiplicatively by all the surfaces the ray
-         hits before reaching the camera.
-        If the ray encounters multiple source of light, all of them
-         will contribute to the light value of the pixel.
-
-        The result is that we only add light to incoming_light when
-         we hit an emissive, and we tint that light to the color that 
-         the ray has assumed so far.
-    */
     vec3 absorbed_light = vec3(1);
 
     if (hit.did_hit) {
@@ -130,14 +161,14 @@ void illuminate_ray(inout Ray ray, HitRecord hit) {
 
     } else {
         absorbed_light = background_color(ray) * ray.color;
-        ray.oob_quadrant |= 1u; // set the first bit to 1
+        ray.out_of_bounds = true;
     }
 
     ray.bounce++;
     ray.light += absorbed_light / float(ray.count + 1);
 
     if (ray.bounce > MAX_BOUNCES)
-        ray.oob_quadrant |= 1u; // set the first bit to 1
+        ray.out_of_bounds = true;
 }
 
 /* Entrypoint */
@@ -152,7 +183,6 @@ void main() {
         Ray ray = raybuffer.rays[idx];
         HitRecord hit = hitbuffer.records[idx];
         illuminate_ray(ray, hit);
-
         // update the ray information for the next bounce
         raybuffer.rays[idx] = ray;
     }

@@ -6,7 +6,6 @@
 #include "util/parameters.comp"
 #include "util/structures.comp"
 
-// todo: experiment
 layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(std430, set = 0, binding = 0) uniform Camera {
@@ -26,6 +25,7 @@ layout(std430, set = 0, binding = 1) readonly buffer RayBuffer {
 
 layout(set = 1, binding = 0) writeonly uniform image2D framebuffer;
 
+/* Quick gamma correction approximation for gamma of 2.0 */
 vec4 gamma_correction(vec4 color) {
     return sqrt(color);
 }
@@ -37,9 +37,10 @@ void main() {
 
     if (coordinates.x < size.x && coordinates.y < size.y) {
         uint idx = coordinates.x + coordinates.y * size.x;
-        imageStore(framebuffer, coordinates, gamma_correction(vec4(raybuffer.rays[idx].light, 1)));
+        vec4 color = vec4(raybuffer.rays[idx].light, 1);
+//        vec4 color = vec4(float(raybuffer.rays[idx].count % (SUBDIVISIONS_PER_AXIS * SUBDIVISIONS_PER_AXIS)) / 4.0);
 
-//        imageStore(framebuffer, coordinates, gamma_correction(vec4((raybuffer.rays[idx].oob_quadrant >> 1) / 4.0)));
+        imageStore(framebuffer, coordinates, gamma_correction(color));
     }
 }
 

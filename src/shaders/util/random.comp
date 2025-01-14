@@ -1,44 +1,60 @@
 const float PI = 3.1415926;
 uint seed;
 
-// 0..1
+/*
+ * Random number generator based on a seed. Returns in range 0..1
+ *
+ * minimal PCG32 code / (c) 2014 M.E. O'Neill / pcg-random.org
+ * Licensed under Apache License 2.0 (NO WARRANTY, etc. see website)
+ */
 float pgc_random(inout uint seed) {
-    // minimal PCG32 code / (c) 2014 M.E. O'Neill / pcg-random.org
-    // Licensed under Apache License 2.0 (NO WARRANTY, etc. see website)
     seed = seed * 747796405u + 2891336453u;
     uint word = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
     return float(word) / 4294967295.0;
 }
 
 // this subdivides the randomness into quadrants as a form of basic low-discrepancy noise.
-vec2 pixel_offset(inout uint seed, inout uint quadrant) {
+/*
+ * Gets a randomly-jittered pixel offset based on a quadriant of the pixel as a way to reduce
+ * the discrepancy of the noise within pixels.
+ * The amount of quadrants is variable.
+ */
+vec2 pixel_offset(inout uint seed, uint quadrant) {
     float offset = 1.0 / float(SUBDIVISIONS_PER_AXIS);
 
+    // get a random offset within the first quadrant
     float x = pgc_random(seed) * offset;
     float y = pgc_random(seed) * offset;
 
+    // offset it by the current quadrant's offset
     x += float(quadrant % SUBDIVISIONS_PER_AXIS) * offset;
     y += float(quadrant / SUBDIVISIONS_PER_AXIS) * offset;
 
-    quadrant = (quadrant + 1) % (SUBDIVISIONS_PER_AXIS * SUBDIVISIONS_PER_AXIS);
     return vec2(x - 0.5, y - 0.5);
 }
 
-// https://www.semanticscholar.org/paper/A-Note-on-the-Generation-of-Random-Normal-Deviates-Box-Muller/bdbf5ecc09facb88308f2325dbf0b458f812ab2e
+/*
+ * Returns a value according to a normal distribution.
+ * Based on https://www.semanticscholar.org/paper/A-Note-on-the-Generation-of-Random-Normal-Deviates-Box-Muller/bdbf5ecc09facb88308f2325dbf0b458f812ab2e
+ */
 float random_normal(inout uint seed) {
     float a = sqrt(-2.0 * log(1.0 - pgc_random(seed)));
     float b = 2.0 * PI * pgc_random(seed);
 
-    return cos(b) * min(a, 1000000000.0); // todo: figure out why this is exploding
+    return cos(b) * min(a, 1.0/EPSILON); // prevent extreme cases
 }
 
-// Since normal distributions are spherically symmetric, sampling it for each coordinate
-//  generates vectors uniformly distributed within the sphere.
+/*
+ * Generates a random unit vector.
+ * Since normal distributions are spherically symmetric, sampling it for each coordinate
+ * generates vectors uniformly distributed within the sphere.
+ */
 vec3 random_unit_vector(inout uint seed) {
     vec3 random = vec3(random_normal(seed), random_normal(seed), random_normal(seed));
     return normalize(random);
 }
 
+/* Returns a random unit vector in a hemisphere given a normal */
 vec3 random_unit_in_hemisphere(inout uint seed, in vec3 normal) {
     vec3 vector = random_unit_vector(seed);
 
@@ -49,6 +65,7 @@ vec3 random_unit_in_hemisphere(inout uint seed, in vec3 normal) {
     }
 }
 
+/* Returns random 2d vectors with magnitude in the range 0..1 */
 vec2 random_disc(inout uint seed) {
     vec2 random = vec2(random_normal(seed), random_normal(seed));
     return normalize(random) * pgc_random(seed); // random direction * random radius

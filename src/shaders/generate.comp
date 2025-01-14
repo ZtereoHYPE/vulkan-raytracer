@@ -7,10 +7,8 @@
 #include "util/structures.comp"
 #include "util/random.comp"
 
-// todo: experiment with different kernel sizes for different stages
 layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
-// todo: look into inline uniform buffers for speed and small data
 layout(std430, set = 0, binding = 0) uniform Camera {
     uvec2 resolution;
     vec2 uv;
@@ -26,16 +24,14 @@ layout(std430, set = 0, binding = 1) buffer RayBuffer {
     Ray rays[];
 } raybuffer;
 
+/*
+ * Generate rays given a coordinate.
+ *
+ * The reason why the previously-existing ray is given is to preserve some state such as
+ * its light color, amount of times it was already generated, and the subpixel quadrant
+ * it previously sampled for better subpixel ray distribution.
+ */
 Ray generate_ray(vec2 frag_coord, Ray ray) {
-    if (camera.frame == 0) {
-        ray.light = vec3(0);
-        ray.count = 1;
-        ray.oob_quadrant = 0;
-    } else {
-        ray.light *= float(ray.count) / float(ray.count + 1);
-        ray.count++; // increment the amount of rays that passed thru this pixel
-    }
-
     // Scale the virtual camera to make the UV plane coincide with the focus plane
     vec2 focus_plane_uv = camera.uv * (camera.focus_distance / camera.focal_len);
 
@@ -46,7 +42,7 @@ Ray generate_ray(vec2 frag_coord, Ray ray) {
     vec3 viewport_origin = vec3(-focus_plane_uv.x/2, focus_plane_uv.y/2, camera.focus_distance) + // Top left of focus plane
                            vec3(pixel_delta/2, 0);  // Center the pixel
 
-    uint quadrant = ray.oob_quadrant >> 1;
+    uint quadrant = ray.count % (SUBDIVISIONS_PER_AXIS * SUBDIVISIONS_PER_AXIS);
     vec3 pixel_coords = viewport_origin +
                         vec3(pixel_delta * (frag_coord + pixel_offset(seed, quadrant)), 0); // Jitter for anti-aliasing
 
@@ -59,12 +55,13 @@ Ray generate_ray(vec2 frag_coord, Ray ray) {
     vec3 ray_origin = (mat3(camera.rotation) * aperture_offset) + camera.origin.xyz;
 
     ray.origin = ray_origin;
-    ray.oob_quadrant = quadrant << 1; // set the least sig. bit to 0, and then the quadrant
     ray.direction = ray_direction;
-    ray.time = pgc_random(seed);
-    ray.color = vec3(1); // initialize the ray as white
-    ray.bounce = 0;
-
+    ray.out_of_bounds = false;
+    ray.time = pgc_random(seed);            // random time for motion blur
+    ray.color = vec3(1);                    // initialize the ray as white
+    ray.bounce = 0;                         // reset the amount of bounces this ray did
+    ray.count++;                            // increment the amount of rays that passed thru this pixel
+    ray.light *= float(ray.count) / float(ray.count + 1);  // the light gets weighted by this amount re-generations
     return ray;
 }
 
@@ -73,12 +70,13 @@ void main() {
     ivec2 coordinates = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = ivec2(camera.resolution);
 
+    // if we fall within the viewport...
     if (coordinates.x < size.x && coordinates.y < size.y) {
-        uint idx = coordinates.x + coordinates.y * size.x;
         seed = uint(coordinates.x + camera.resolution.x * coordinates.y + camera.frame * camera.resolution.y * camera.resolution.x);
+        uint idx = coordinates.x + coordinates.y * size.x;
 
         // generate the missing / out of bounds rays
-        if ((raybuffer.rays[idx].oob_quadrant & 1u) == 1u)
+        if (raybuffer.rays[idx].out_of_bounds)
             raybuffer.rays[idx] = generate_ray(coordinates, raybuffer.rays[idx]);
     }
 }

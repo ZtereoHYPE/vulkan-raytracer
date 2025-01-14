@@ -1,11 +1,18 @@
 /*
- * Ray
+ * Ray.
  *
- * The packing was performed to keep the ray within a signle 64-bit cacheline.
+ * origin               location of the ray
+ * out_of_bounds        whether the ray is out of bounds
+ * direction            the direction of the ray
+ * time                 local time of the ray, used for motion blur
+ * color                current color of the ray, obtained by bouncing around
+ * count                how many times this ray was fired in the current pixel
+ * light                how much light was gathered by rays in this pixel
+ * bounce               the amount of bounces of the ray
  */
 struct Ray {
     vec3 origin;
-    uint oob_quadrant; // least sig. bit is oob; next bits are quadrant
+    bool out_of_bounds;
     vec3 direction;
     float time;
     vec3 color;
@@ -14,7 +21,14 @@ struct Ray {
     uint bounce;
 };
 
-/* AABB node of the BVH tree */
+/*
+ * AABB node of the BVH tree.
+ *
+ * min                  minimum bounds of the box
+ * max                  maximum bounds of the box
+ * idx                  index of triangles if leaf; index of child nodes else
+ * amt                  amount of triangles if leaf; 0 else
+ */
 struct BvhNode {
     vec3 min;
     uint idx;
@@ -22,15 +36,17 @@ struct BvhNode {
     uint amt;
 };
 
-/* Material of a Mesh.
+/*
+ * Material of a Mesh.
  *
- * base_color           is the base color of the mesh;
- * emission             is strenght of the emitted light by the object per channel;
- * reflectivity         describes how reflective the object is (blends between lambertian and metallic);
- * roughness            describes how rough the reflective surface is;
+ * base_color           the base color of the mesh;
+ * emission             strenght of the emitted light by the object per channel;
+ * reflectivity         how reflective the object is (blends between lambertian and metallic);
+ * roughness            how rough the reflective surface is;
  * is_glass             indicates whether the material will be rendered with a glass shader;
- * ior                  is the index of refractivity of the glass material, if is_glass is true;         
+ * ior                  the index of refractivity of the glass material, if is_glass is true;
  * shaded_smooth        only valid for triangle meshes, determines whether normals are interpolated;
+ * motion_blur          vector indicating the velocity of the mesh in space;
  */
 struct Material {
     vec3 base_color;
@@ -43,10 +59,21 @@ struct Material {
     vec3 motion_blur;
 };
 
-// perf: these triangles are pretty huge.
-// Since if not shaded smooth the normals are ignored, then they can be used to 
-// store 2 triangle per triangle...
-// Or maybe just remove the normals altogether
+/*
+ * Triangle used as component of meshes.
+ *
+ * When used as actual triangle:
+ * is_sphere            false
+ * vertices             location of triangle vertices
+ * normals              normals of the vertices (used for smooth shading)
+ * material_idx         index of the material of the triangle
+ *
+ * When used as sphere container:
+ * is_sphere            true
+ * vertices[0]          center of sphere
+ * vertices[1][0]       radius of sphere
+ * material_idx         index of the material of the sphere
+ */
 struct Triangle {
     vec3[3] vertices;
     vec3[3] normals;
@@ -54,14 +81,16 @@ struct Triangle {
     bool is_sphere;
 };
 
-/* Record of a ray intersection.
+/*
+ * Record of a ray intersection.
  *
- * did_hit      indicates whether an intesection even happened;
- *              !! If no intersection happened, then the following fields are undefined !!
- * pos          is the physical location of the intersection;
- * normal       is the normal vector of the intersected surface;
- * t            is the value of the parametric variable for the ray equation;
- * material     is the material of the intersected mesh;
+ * did_hit              indicates whether an intesection even happened;
+ *                      !! If no intersection happened, then the following fields are undefined !!
+ * is_exiting           whether the ray was entering or exiting the hit mesh;
+ * pos                  physical location of the intersection;
+ * normal               normal vector of the intersected surface;
+ * t                    value of the parametric variable for the ray equation;
+ * material             material of the intersected mesh;
  */
 struct HitRecord {
     bool did_hit;
