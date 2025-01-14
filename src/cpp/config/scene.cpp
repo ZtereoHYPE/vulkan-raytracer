@@ -26,7 +26,7 @@ glm::vec3 Triangle::maxBound() const {
  *  camera:
  *    resolution: [300, 400]
  *    location: [1, 2, 3.4]
- *    rotation: [0, 90, 0]  # in degrees for each axys
+ *    rotation: [0, 90, 0]  # XYZ euler rotation
  *    focal_length: 1.1
  *    focus_distance: 5.4
  *    aperture_radius: 0  # DoF disabled
@@ -135,12 +135,12 @@ void Scene::loadCameraControls() {
     };
 
     // Calculate rotation matrix
-    glm::vec3 rotation = toVec(camera["rotation"].as<std::array<float, 3>>());
-    glm::mat4 rotMatrix = glm::identity<glm::mat4>();
-
-    rotMatrix = glm::rotate(rotMatrix, (float)(rotation[0] * M_PI / 180.0f), glm::vec3(1,0,0));
-    rotMatrix = glm::rotate(rotMatrix, (float)(rotation[1] * M_PI / 180.0f), glm::vec3(0,1,0));
-    rotMatrix = glm::rotate(rotMatrix, (float)(rotation[2] * M_PI / 180.0f), glm::vec3(0,0,1));
+    std::array<float, 3> rotations = camera["rotation"].as<std::array<float, 3>>();
+    glm::mat4 rotMatrix = glm::eulerAngleXYZ(
+        glm::radians(rotations[0]),
+        glm::radians(rotations[1]),
+        glm::radians(rotations[2])
+    );
     ubo.rotation = rotMatrix;
 
     // Calculate UV
