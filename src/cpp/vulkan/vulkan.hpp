@@ -145,6 +145,12 @@ void copyBuffer(vk::Device const &device,
                 vk::Buffer &dst,
                 vk::DeviceSize size);
 
+void clearBuffer(vk::Device const &device,
+                 vk::CommandPool const &commandPool,
+                 vk::Queue const &queue,
+                 vk::Buffer &src,
+                 vk::DeviceSize size);
+
 std::tuple<vk::Buffer, vk::DeviceMemory> createBuffer(vk::PhysicalDevice const &physicalDevice,
                                                       vk::Device const &device,
                                                       vk::DeviceSize size,

@@ -78,8 +78,8 @@ class RayTracerProgram {
         // Queue and command pool initialization
         presentQueue = device.getQueue(queueFamilies.presentFamily.value(), 0);
         computeQueue = device.getQueue(queueFamilies.computeFamily.value(), 0);
-        vk::CommandPool computeCommandPool = createCommandPool(device, queueFamilies.computeFamily.value());
-        computeCommandBuffer = createCommandBuffer(device, computeCommandPool);
+        vk::CommandPool commandPool = createCommandPool(device, queueFamilies.computeFamily.value());
+        computeCommandBuffer = createCommandBuffer(device, commandPool);
 
 
         // Images and Buffers allocation and initialization
@@ -96,6 +96,7 @@ class RayTracerProgram {
         size_t hitBufferSize = swapChainExtent.width * swapChainExtent.height * 120; // size of hit record
         auto [rayBuffer, rayMemory] = createBuffer(physicalDevice, device, rayBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
         auto [hitBuffer, hitMemory] = createBuffer(physicalDevice, device, hitBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        clearBuffer(device, commandPool, computeQueue, rayBuffer, rayBufferSize); // clear ray buffer
 
 
         // Descriptor sets and pipeline creation
