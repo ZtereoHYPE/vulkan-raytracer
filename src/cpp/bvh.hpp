@@ -13,6 +13,9 @@ const glm::vec3 MIN_VAL = glm::vec3(-1e30, -1e30, -1e30);
 struct Triangle; 
 struct Material;
 
+/*
+ * Class that represents a node of the BVH tree.
+ */
 struct BvhNode {
     // This layout matches the same compact layout as the shader
     glm::vec3 min = MAX_VAL;
@@ -22,19 +25,21 @@ struct BvhNode {
 
     void initialize(std::vector<Triangle> &triangles, std::span<uint> &indices, uint offset);
     void expand(Triangle tri);
-    // todo: isLeaf and other helper methods
     float area();
 };
 
+/*
+ * Builder class for the BVH tree.
+ */
 class BvhBuilder {
     std::vector<BvhNode> bvhList{};
     std::vector<Triangle> &triangles;
     std::vector<Material> &materials;
 
 public:
-    BvhBuilder(std::vector<Triangle> &triangles, std::vector<Material> materials) 
+    BvhBuilder(std::vector<Triangle> &triangles, std::vector<Material> materials)
         : triangles(triangles), materials(materials) {};
-    std::vector<BvhNode> buildBvh();
+    std::vector<BvhNode> build();
 
 private:
     void buildRecursively(size_t nodeIdx, std::span<uint> ordering, uint depth, uint offset, float parentCost);
@@ -43,5 +48,4 @@ private:
     void applyMotionBlur(size_t nodeIdx);
     
     static void applyOrdering(std::vector<Triangle>& items, const std::vector<uint>& ordering);
-    static void swap(uint &left, uint &right);
 };

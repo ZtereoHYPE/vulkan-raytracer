@@ -1,5 +1,6 @@
 #include "bvh.hpp"
 
+/** Helper function to get the minimum coordinate of a triangle given the needed axis */
 float axisMin(Triangle tri, size_t axis) {
     float min = tri.vertices[0][axis];
     for (int vtx = 1; vtx < 3; ++vtx) {
@@ -10,6 +11,7 @@ float axisMin(Triangle tri, size_t axis) {
     return min;
 }
 
+/** Helper function to get the maximum coordinate of a triangle given the needed axis */
 float axisMax(Triangle tri, size_t axis) {
     float max = tri.vertices[0][axis];
     for (int vtx = 1; vtx < 3; ++vtx) {
@@ -20,6 +22,14 @@ float axisMax(Triangle tri, size_t axis) {
     return max;
 }
 
+/** Helper function to swap two uints */
+void swap(uint &left, uint &right) {
+    uint tmp = left;
+    left = right;
+    right = tmp;
+}
+
+/** Returns surface area of bounding box. Used for SAH */
 float BvhNode::area() {
     // if the node is uninitialized / expanded with 0 trianges thne this yields NaN
     if (max == MIN_VAL || min == MAX_VAL) return 0;
@@ -27,11 +37,16 @@ float BvhNode::area() {
     return 2 * (len[0] * len[1] + len[0] * len[2] + len[1] * len[2]);
 }
 
+/** Expands the BVN node's bounds to include the given triangle / sphere */
 void BvhNode::expand(Triangle tri) {
     min = glm::min(min, tri.minBound());
     max = glm::max(max, tri.maxBound());
 }
 
+/**
+ * Initializes a node based on the given data.
+ * Afterwards, this node is ready to be used as a leaf node.
+ */
 void BvhNode::initialize(std::vector<Triangle> &triangles, std::span<uint> &indices, uint offset) {
     // Expand the node's bounds
     for (auto idx : indices) 
@@ -42,27 +57,39 @@ void BvhNode::initialize(std::vector<Triangle> &triangles, std::span<uint> &indi
     amt = indices.size();   // amt size => leaf
 }
 
-std::vector<BvhNode> BvhBuilder::buildBvh() {
+/**
+ * Builder method to finally the BVH tree.
+ * The nodes are stored linearly in a vector which is returned, and the triangles
+ * are reordered using an index array during the construction of the BVH to avoid
+ * excessive memory writes.
+ * Motion blur is applied as an additional step.
+ */
+std::vector<BvhNode> BvhBuilder::build() {
     // Create triangle index list with linear sequence (0,1,2...)
     std::vector<uint> indices(triangles.size());
     std::iota(indices.begin(), indices.end(), 0);
 
+    // Push the initial node
     bvhList.push_back(BvhNode());
+
+    // Build the BVH
     buildRecursively(0, std::span(indices), 0, 0, 1e30);
 
-    // Applies the indices to the triangles. This avoids lots of memory movement
-    // while the BVH is being built, and significantly speeds the process up.
+    // Applies the indices to the triangles.
     applyOrdering(triangles, indices);
-    
+
+    // Apply motion blur
     applyMotionBlur(0);
 
     return bvhList;
 }
 
 /**
- * Builds the BVH by perfroming a recursive algorithm
- *
- * Inspired by https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
+ * Builds the BVH by recursively performing the following steps:
+ * - Initialize the node as leaf
+ * - Find the best split location and split the indices
+ * - If no improvements are yielded over the parent node return. This node is now a leaf.
+ * - Else, change the node to be a parent node, push the two children, and recurse on them.
  */
 void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint depth, uint offset, float parentCost) {
     // Initialize the node's data.
@@ -86,6 +113,7 @@ void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint 
         if (center < splitPos) {
             ++leftIdx;
         } else {
+            // This ends up ordering the index array
             swap(indices[leftIdx], indices[rightIdx--]);
         }
     }
@@ -107,9 +135,9 @@ void BvhBuilder::buildRecursively(size_t nodeIdx, std::span<uint> indices, uint 
     buildRecursively(leftNodeIdx + 1, indices.subspan(leftIdx, indices.size() - leftIdx), depth + 1, offset + leftIdx, bestCost);
 }
 
-/*
+/**
  * Finds the best location and axis to perform a split by attempting to split the
- * volume SPLIT_ATTEMPTS times.
+ * volume SPLIT_ATTEMPTS times, and minimising a cost function.
  */
 std::tuple<size_t, float> BvhBuilder::findBestSplit(uint nodeIdx, std::span<uint> &indices) {
     // Get the node's AABB information
@@ -124,8 +152,8 @@ std::tuple<size_t, float> BvhBuilder::findBestSplit(uint nodeIdx, std::span<uint
     for (size_t axis : {0, 1, 2}) {
         if (params.BVH_SPLIT_ATTEMPTS == -1) {
             // Try at every possible position
-            for (uint triIdx : indices) {
-                Triangle tri = triangles[triIdx];
+            for (uint const triIdx : indices) {
+                Triangle const tri = triangles[triIdx];
                 float pos = (axisMin(tri, axis) + axisMax(tri, axis)) / 2;
                 float cost = splitCost(indices, axis, pos);
 
@@ -156,7 +184,7 @@ std::tuple<size_t, float> BvhBuilder::findBestSplit(uint nodeIdx, std::span<uint
     return std::make_tuple(bestAxis, bestPos);
 }
 
-/*
+/**
  * The Surface Area Heuristic estimates the "cost" of a split, to be minimized.
  *
  * The reasoning behind it is that the factor that a BVH wants to minimize is 
@@ -225,6 +253,7 @@ void BvhBuilder::applyMotionBlur(size_t nodeIdx) {
     }
 }
 
+/** Apply the ordering of indices to a vector of items. */
 void BvhBuilder::applyOrdering(std::vector<Triangle>& items, const std::vector<uint>& indices) {
     size_t const size = items.size();
 
@@ -236,8 +265,3 @@ void BvhBuilder::applyOrdering(std::vector<Triangle>& items, const std::vector<u
     items.swap(sorted);
 }
 
-void BvhBuilder::swap(uint &left, uint &right) {
-    uint tmp = left;
-    left = right;
-    right = tmp;
-}

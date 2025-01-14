@@ -19,7 +19,6 @@ scene:
     is_glass: true
     motion_blur:  [0, 0.0, 0]
   data:
-    #center: [0.5, 1.2, 0.8]
     center: [0.3, 0.3, 1.0]
     radius: 0.2
     
@@ -17835,8 +17834,8 @@ scene:
     - 0.0
     - 0.0
     - 0.0
-    reflectiveness: null
-    roughness: null
+    reflectiveness: 1
+    roughness: 0
     ior: 1.45
     is_glass: true
     smooth_shading: false

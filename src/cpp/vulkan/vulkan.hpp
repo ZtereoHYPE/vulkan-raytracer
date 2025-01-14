@@ -122,7 +122,6 @@ vk::DescriptorSet createPostProcessDescriptorSet(vk::Device const &device,
                                                  vk::DescriptorPool const &pool,
                                                  vk::Buffer const &uniformBuffer,
                                                  vk::Buffer const &rayBuffer,
-                                                 vk::Sampler sampler,
                                                  vk::DescriptorSetLayout &layout);
 
 std::vector<vk::DescriptorSet> createFramebufferDescriptorSets(vk::Device const &device,

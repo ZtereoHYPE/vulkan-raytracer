@@ -1,5 +1,6 @@
 #include "util.hpp"
 
+/** Utility function to read a file's contents into a vector of characters */
 std::vector<char> readFile(const std::string& filename) {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 

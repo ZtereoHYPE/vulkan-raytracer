@@ -86,7 +86,7 @@ class RayTracerProgram {
         auto [bvhSize, matSize, triSize] = scene.getBufferSizes();
         printf("log: Total scene size: %lu + %lu + %lu = %lu B\n", bvhSize, matSize, triSize, bvhSize + matSize + triSize);
 
-        auto [uniformBuffer, uniformMemory, uniformMemoryMap] = createMappedBuffer(physicalDevice, device, sizeof(CameraControlsUniform), vk::BufferUsageFlagBits::eUniformBuffer);
+        auto [uniformBuffer, uniformMemory, uniformMemoryMap] = createMappedBuffer(physicalDevice, device, sizeof(CameraControls), vk::BufferUsageFlagBits::eUniformBuffer);
         this->uniformMemoryMap = uniformMemoryMap;
 
         auto [sceneBuffer, sceneMemory, sceneMemoryMap] = createMappedBuffer(physicalDevice, device, bvhSize + matSize + triSize, vk::BufferUsageFlagBits::eStorageBuffer);
@@ -107,7 +107,7 @@ class RayTracerProgram {
         genDescriptorSet = createGenerateDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, genDescrLayout);
         intDescriptorSet = createIntersectDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, hitBuffer, sceneBuffer, bvhSize, matSize, intDescrLayout);
         shadeDescriptorSet = createShadeDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, sceneBuffer, hitBuffer, bvhSize, matSize, sampler, shadeDescrLayout);
-        postDescriptorSet = createPostProcessDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, sampler, postDescrLayout);
+        postDescriptorSet = createPostProcessDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, postDescrLayout);
         frameDescriptorSet = createFramebufferDescriptorSets(device, descriptorPool, swapChainImageViews, sampler, frameDescrLayout);
 
         genPipeline = createComputePipeline(device, {genDescrLayout}, "build/shaders/generate.comp.spv", genLayout); // todo: move main in function
@@ -290,8 +290,6 @@ class RayTracerProgram {
             vk::DependencyFlags(0), memoryBarrier, nullptr, nullptr
         );
 
-
-        // image barrier here?
         // Post process the accumulated rays
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, postPipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, postLayout, 0, {postDescriptorSet, frameDescriptorSet[imageIndex]}, nullptr);
@@ -327,7 +325,7 @@ class RayTracerProgram {
     }
 
     void updateUniformBuffer(void* uniformMemoryMap) {
-        CameraControlsUniform ubo = scene.getCameraControls();
+        CameraControls ubo = scene.getCameraControls();
         ubo.time = frameCounter;
         // to support scaled monitors
         ubo.resolution = glm::uvec2(swapChainExtent.width, swapChainExtent.height);

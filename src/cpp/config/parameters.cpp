@@ -2,6 +2,7 @@
 
 Parameters params; // instantiate global
 
+/** Constructor that assigns all the parameters from the file */
 Parameters::Parameters(std::filesystem::path path)
 :
       root(YAML::LoadFile(path)),

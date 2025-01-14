@@ -4,7 +4,9 @@
 #include <vulkan/vulkan.hpp>
 #include <GLFW/glfw3.h>
 
-
+/*
+ * Wrapper around GLFW used to create a window and obtain its surface.
+ */
 struct Window {
     GLFWwindow* glfwWindow;
 
@@ -15,7 +17,6 @@ struct Window {
 
     vk::SurfaceKHR createVulkanSurface(vk::Instance const &instance) const;
     void getFramebufferSize(int *width, int *height);
-    void waitEvents();
     void pollEvents();
     bool shouldClose();
     void terminate() const;

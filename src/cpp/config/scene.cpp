@@ -1,5 +1,11 @@
 #include "scene.hpp"
 
+const std::string CONFIG_VERSION = "0.2";
+
+/**
+ * Triangle method to get its minimum bound.
+ * Adapts to whether the triangle actually represents a sphere.
+ */
 glm::vec3 Triangle::minBound() const {
     if (isSphere) {
         const float radius = vertices[1][0];
@@ -9,6 +15,10 @@ glm::vec3 Triangle::minBound() const {
     }
 }
 
+/**
+ * Triangle method to get its maximum bound.
+ * Adapts to whether the triangle actually represents a sphere.
+ */
 glm::vec3 Triangle::maxBound() const {
     if (isSphere) {
         const float radius = vertices[1][0];
@@ -19,39 +29,9 @@ glm::vec3 Triangle::maxBound() const {
     
 }
 
-/* EXAMPLE CONFIG:
- *
- *  version: 0.2
- * 
- *  camera:
- *    resolution: [300, 400]
- *    location: [1, 2, 3.4]
- *    rotation: [0, 90, 0]  # XYZ euler rotation
- *    focal_length: 1.1
- *    focus_distance: 5.4
- *    aperture_radius: 0  # DoF disabled
- * 
- *  scene:
- *    - Mesh Name:
- *        type: TriMesh
- *        material:
- *          base_color: [0.7, 0.7, 0.7]
- *        data:
- *          vertices: [0.3, 0.5, -4, ...]
- *          normals: [0, 1, 0, ...]  
- *
- *    - Sun:
- *        type: Sphere
- *        material:
- *          base_color: [1, 1, 1]
- *          emission: [10, 10, 10]
- *        data:
- *          center: [100, 100, 100]
- *          radius: 50
+/**
+ * Construct a scene by validating, loading the file, and building a BVH.
  */
-
-const std::string CONFIG_VERSION = "0.2";
-
 Scene::Scene(std::filesystem::path path)
 :
     root(YAML::LoadFile(path))
@@ -62,24 +42,42 @@ Scene::Scene(std::filesystem::path path)
     buildBVH();
 }
 
+/* Return the size of the BHV, Material, and Triangle buffers respectively */
 std::tuple<size_t, size_t, size_t> Scene::getBufferSizes() {
     BufferBuilder bvhBuf, matBuf, triBuf;
-    for (auto node : components.bvh)
+    for (auto node : bvh)
         bvhBuf.append(node);
 
-    for (auto material : components.materials)
+    for (auto material : materials)
         matBuf.append(material);
 
-    for (auto triangle : components.triangles)
+    for (auto triangle : triangles)
         triBuf.append(triangle);
 
     return std::make_tuple(bvhBuf.getOffset(), matBuf.getOffset(), triBuf.getOffset());
 }
 
-CameraControlsUniform Scene::getCameraControls() {
-    return components.camera;
+/* Return the camera information stored in the config, if any. */
+CameraControls Scene::getCameraControls() {
+    return cameraControls;
 }
 
+/* Write the scene to memory */
+void Scene::writeBuffers(void *memory) {
+    BufferBuilder memoryBuf;
+    for (auto node : bvh)
+        memoryBuf.append(node);
+
+    for (auto material : materials)
+        memoryBuf.append(material);
+
+    for (auto triangle : triangles)
+        memoryBuf.append(triangle);
+
+    memoryBuf.write(memory);
+}
+
+/* This method performs some very basic validation on the scene file */
 void Scene::validateFile() {
     typedef std::string str;
 
@@ -122,11 +120,12 @@ void Scene::validateFile() {
     assertTrue(camera["rotation"].size() == 3);
 }
 
+/* Load the camera controls from the file */
 void Scene::loadCameraControls() {
     auto camera = root["camera"];
 
     // Load constant parameters
-    CameraControlsUniform ubo {
+    CameraControls ubo {
         .resolution = toVec(camera["resolution"].as<std::array<uint, 2>>()),
         .focalLength =      camera["focal_length"].as<float>(),
         .focusDistance =    camera["focus_distance"].as<float>(),
@@ -155,23 +154,10 @@ void Scene::loadCameraControls() {
     }
     ubo.viewportUv = glm::vec2(u, v);
 
-    components.camera = ubo;
+    cameraControls = ubo;
 }
 
-void Scene::writeBuffers(void *memory) {
-    BufferBuilder memoryBuf;
-    for (auto node : components.bvh)
-        memoryBuf.append(node);
-
-    for (auto material : components.materials)
-        memoryBuf.append(material);
-
-    for (auto triangle : components.triangles)
-        memoryBuf.append(triangle);
-
-    memoryBuf.write(memory);
-}
-
+/** Load meshes from the yaml file to the triangle vector */
 void Scene::loadMeshes() {
     typedef std::string str;
 
@@ -185,6 +171,7 @@ void Scene::loadMeshes() {
     }
 }
 
+/** Load triangle meshes */
 void Scene::loadTriMesh(YAML::Node mesh) {
     auto verts = mesh["data"]["vertices"].as<std::vector<float>>();
     auto norms = mesh["data"]["normals"].as<std::vector<float>>();
@@ -193,8 +180,8 @@ void Scene::loadTriMesh(YAML::Node mesh) {
     size_t triangleAmt = verts.size() / 9;
 
     // append the material 
-    uint materialIdx = components.materials.size();
-    components.materials.push_back(getMaterial(mesh["material"]));
+    uint materialIdx = materials.size();
+    materials.push_back(getMaterial(mesh["material"]));
 
     // append the triangles
     for (size_t i = 0; i < triangleAmt; ++i) {
@@ -208,14 +195,15 @@ void Scene::loadTriMesh(YAML::Node mesh) {
             tri.normals[j] = glm::vec4(norms[off], norms[off+1], norms[off+2], 0);
         }
 
-        components.triangles.push_back(tri);
+        triangles.push_back(tri);
     }
 }
 
+/** Load spheres by containing them in a triangle */
 void Scene::loadSphere(YAML::Node sphere) {
     // append the material
-    uint materialIdx = components.materials.size();
-    components.materials.push_back(getMaterial(sphere["material"]));
+    uint materialIdx = materials.size();
+    materials.push_back(getMaterial(sphere["material"]));
 
     auto center = sphere["data"]["center"].as<std::vector<float>>();
 
@@ -226,15 +214,23 @@ void Scene::loadSphere(YAML::Node sphere) {
     tri.isSphere = true;
 
     // append the sphere. Unfortunately this wastes an entire triangle.
-    components.triangles.push_back(tri);
+    triangles.push_back(tri);
 }
 
+/* Build a BVH for the scene */
 void Scene::buildBVH() {
+    using namespace std::chrono;
     std::cout << "building BVH..." << "\n";
-    components.bvh = BvhBuilder(components.triangles, components.materials).buildBvh();
-    std::cout << "done!" << "\n";
+
+    auto pre = high_resolution_clock::now();
+    bvh = BvhBuilder(triangles, materials).build();
+    auto post = high_resolution_clock::now();
+
+    auto duration = duration_cast<milliseconds>(post - pre);
+    std::cout << "done! (" << duration.count() << "ms)\n";
 }
 
+/* Returns the Material object from the current material node */
 Material Scene::getMaterial(YAML::Node node) {
     // default color value
     std::array<float, 3> def = {0, 0, 0};
@@ -252,6 +248,7 @@ Material Scene::getMaterial(YAML::Node node) {
     };
 }
 
+/** Helper function used for file validation */
 void assertTrue(bool value) {
     if (!value) {
         throw std::runtime_error("The configuration has one or more mistakes.");

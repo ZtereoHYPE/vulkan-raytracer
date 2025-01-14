@@ -599,6 +599,11 @@ CommandBuffer createCommandBuffer(Device const &device, CommandPool const &comma
     return device.allocateCommandBuffers(allocInfo)[0];
 }
 
+/*
+ * Creates a descriptor set based on a vector of descriptor types, and the buffer and image
+ * informations passed in. Each type is matched with the first info from the corresponding
+ * arrays.
+ */
 DescriptorSet createDescriptorSet(Device const &device,
                                   DescriptorSetLayout const &descriptorSetLayout,
                                   DescriptorPool const &descriptorPool,
@@ -642,6 +647,10 @@ DescriptorSet createDescriptorSet(Device const &device,
     return descriptorSet;
 }
 
+/*
+ * Creates a descriptor set layout for a compute shader based on a vector of descriptor types.
+ * Each type has exactly one matching descriptor in the layout.
+ */
 DescriptorSetLayout createDescriptorSetLayout(Device const &device, std::vector<DescriptorType> types) {
     std::vector<DescriptorSetLayoutBinding> bindings{};
     for (uint idx = 0; idx < types.size(); ++idx) {
@@ -662,6 +671,9 @@ DescriptorSetLayout createDescriptorSetLayout(Device const &device, std::vector<
     return device.createDescriptorSetLayout(layoutInfo);
 }
 
+/*
+ * Creates description layout and set for the ray generation compute stage
+ */
 DescriptorSet createGenerateDescriptorSet(Device const &device,
                             DescriptorPool const &pool,
                             Buffer const &uniformBuffer,
@@ -688,6 +700,9 @@ DescriptorSet createGenerateDescriptorSet(Device const &device,
     return createDescriptorSet(device, layout, pool, types, bufferInfos, {});
 }
 
+/*
+ * Creates description layout and set for the ray-mesh intersection compute stage
+ */
 DescriptorSet createIntersectDescriptorSet(Device const &device,
                              DescriptorPool const &pool,
                              Buffer const &uniformBuffer,
@@ -738,6 +753,9 @@ DescriptorSet createIntersectDescriptorSet(Device const &device,
     return createDescriptorSet(device, layout, pool, types, bufferInfos, {});
 }
 
+/*
+ * Creates description layout and set for the shading compute stage
+ */
 DescriptorSet createShadeDescriptorSet(Device const &device,
                          DescriptorPool const &pool,
                          Buffer const &uniformBuffer,
@@ -781,16 +799,15 @@ DescriptorSet createShadeDescriptorSet(Device const &device,
 }
 
 /*
- * This one is trickier than the other because the post process shader needs 2 descriptor sets:
- * - a normal one for the accumulator buffer
- * - one that changes every frame for the framebuffer
+ * Creates description layout and set for the post processing compute stage.
+ * This however lacks one descriptor: the image that the result is rendered to.
+ * This image is provided via a different descriptor set.
  */
 DescriptorSet createPostProcessDescriptorSet(Device const &device,
-                               DescriptorPool const &pool,
-                               Buffer const &uniformBuffer,
-                               Buffer const &rayBuffer,
-                               Sampler sampler,
-                               DescriptorSetLayout &layout) {
+                                             DescriptorPool const &pool,
+                                             Buffer const &uniformBuffer,
+                                             Buffer const &rayBuffer,
+                                             DescriptorSetLayout &layout) {
 
     std::vector<DescriptorSet> sets{};
 
@@ -815,11 +832,15 @@ DescriptorSet createPostProcessDescriptorSet(Device const &device,
     return createDescriptorSet(device, layout, pool, types, bufferInfos, {});
 }
 
+/*
+ * Creates second description layout and set for the post processing compute stage.
+ * This is responsible for attaching the framebuffer to the compute shader.
+ */
 std::vector<DescriptorSet> createFramebufferDescriptorSets(Device const &device,
-                                DescriptorPool const &pool,
-                                std::vector<ImageView> &swapchainViews,
-                                Sampler sampler,
-                                DescriptorSetLayout &layout) {
+                                                           DescriptorPool const &pool,
+                                                           std::vector<ImageView> &swapchainViews,
+                                                           Sampler sampler,
+                                                           DescriptorSetLayout &layout) {
 
     std::vector types { DescriptorType::eStorageImage };
     layout = createDescriptorSetLayout(device, types);
@@ -837,12 +858,12 @@ std::vector<DescriptorSet> createFramebufferDescriptorSets(Device const &device,
     return sets;
 }
 
-// /*
-//  * Creates a basic compute pipeline and returns it and its layout.
-//  *
-//  * The pipeline entrypoint is a shader called "main.comp" and located in
-//  * build/shaders/main.comp.spv
-//  */
+/*
+ * Creates a basic compute pipeline and returns it and its layout.
+ *
+ * The pipeline's shader path is provided as an argument, and has a function
+ * called "main" as entrypoint.
+ */
 Pipeline createComputePipeline(Device const &device,
                                std::vector<DescriptorSetLayout> const &descriptorSetLayouts,
                                std::string const &shaderPath,
@@ -1008,6 +1029,7 @@ void transitionImageLayout(Device const &device,
                            Image const &image,
                            ImageLayout oldLayout,
                            ImageLayout newLayout) {
+
     CommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
 
     // barriers are an easy way to transition image layouts

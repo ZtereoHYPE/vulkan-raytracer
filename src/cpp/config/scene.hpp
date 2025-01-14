@@ -13,6 +13,40 @@
 #include "../bvh.hpp"
 #include "../util/util.hpp"
 
+/* EXAMPLE CONFIG:
+ *
+ *  version: 0.2
+ *
+ *  camera:
+ *    resolution: [300, 400]
+ *    location: [1, 2, 3.4]
+ *    rotation: [0, 90, 0]  # XYZ euler rotation
+ *    focal_length: 1.1
+ *    focus_distance: 5.4
+ *    aperture_radius: 0  # DoF disabled
+ *
+ *  scene:
+ *    - Mesh Name:
+ *        type: TriMesh
+ *        material:
+ *          base_color: [0.7, 0.7, 0.7]
+ *        data:
+ *          vertices: [0.3, 0.5, -4, ...]
+ *          normals: [0, 1, 0, ...]
+ *
+ *    - Sun:
+ *        type: Sphere
+ *        material:
+ *          base_color: [1, 1, 1]
+ *          emission: [10, 10, 10]
+ *        data:
+ *          center: [100, 100, 100]
+ *          radius: 50
+ */
+
+/**
+ * Material struct aligned and padded to match GLSL version.
+ */
 struct Material {
     alignas(16) glm::vec3 baseColor;
     alignas(16) glm::vec3 emission;
@@ -24,6 +58,9 @@ struct Material {
     alignas(16) glm::vec3 motionBlur;
 };
 
+/**
+ * Triangle struct aligned and padded to match GLSL version.
+ */
 struct Triangle {
     alignas(16) glm::vec4 vertices[3];
     alignas(16) glm::vec4 normals[3];
@@ -34,7 +71,10 @@ struct Triangle {
     glm::vec3 maxBound() const;
 };
 
-struct CameraControlsUniform {
+/**
+ * Camera controls struct aligned and padded to match GLSL version.
+ */
+struct CameraControls {
     glm::uvec2 resolution;
     glm::vec2 viewportUv;
     float focalLength;
@@ -47,47 +87,32 @@ struct CameraControlsUniform {
 
 struct BvhNode; // forward declaration
 
-struct SceneComponents {
-    CameraControlsUniform camera;
+/**
+ * Class that represents and prepares the rendered Scene from a file.
+ */
+class Scene {
+    YAML::Node root;
 
+    CameraControls cameraControls;
     std::vector<BvhNode> bvh;
     std::vector<Material> materials;
     std::vector<Triangle> triangles;
-};
-
-class Scene {
-    YAML::Node root;
-    SceneComponents components;
 
    public:
     explicit Scene(std::filesystem::path path = "scene.yaml");
-
-    /* Return the size of the BHV, Material, and Triangle buffers respectively */
     std::tuple<size_t, size_t, size_t> getBufferSizes();
-
-    /* Return the camera information stored in the config, if any. */
-    CameraControlsUniform getCameraControls();
-
-    /* Write the scene to memory */
+    CameraControls getCameraControls();
     void writeBuffers(void *memory);
 
    private:
-    /* This method performs some very basic validation on the scene file */
     void validateFile();
-
-    /* Load the camera controls from the file */
     void loadCameraControls();
-
-    /* These methods handle the loading of the various meshes and their triangles */
     void loadMeshes();
     void loadTriMesh(YAML::Node trimesh);
     void loadSphere(YAML::Node sphere);
-
-    /* This method builds a BVH for the scene */
     void buildBVH();
 
-    /* Returns the Material object from the current material node */
     static Material getMaterial(YAML::Node);
 };
 
-inline void assertTrue(bool value); // used in validation
+inline void assertTrue(bool value);

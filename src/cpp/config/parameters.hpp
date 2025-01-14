@@ -5,6 +5,10 @@
 
 #include "../util/util.hpp"
 
+/**
+ * Class containing all the program's tweakable parameters.
+ * This is loaded at runtime from a file allowing easy deployment and modification.
+ */
 class Parameters {
     YAML::Node root;
     std::vector<std::string> validationLayersMemory; // required as c-style strings are just pointers
@@ -26,4 +30,5 @@ class Parameters {
     explicit Parameters(std::filesystem::path path = "parameters.yaml");
 };
 
-extern Parameters params; // global instance of Parameters
+/** Global instance of parameters accessible to any file including this header */
+extern Parameters params;
