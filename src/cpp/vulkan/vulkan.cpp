@@ -398,8 +398,8 @@ SwapchainKHR createSwapChain(Window &window,
         .pQueueFamilyIndices = queueFamilyIndices.data(),
         .preTransform = SurfaceTransformFlagBitsKHR::eIdentity,
         .compositeAlpha = CompositeAlphaFlagBitsKHR::eOpaque,   // alpha used for blending in compositor
-        .presentMode = PresentModeKHR::eFifo,                   // fifo should always be supported
-        .clipped = False,                                       // we want the whole image to be rendered
+        .presentMode = PresentModeKHR::eMailbox,
+        .clipped = True,
         .oldSwapchain = VK_NULL_HANDLE,                      // we don't have an old swapchain to "recycle"
     };
 
@@ -957,6 +957,24 @@ void copyBuffer(Device const &device,
     BufferCopy copyRegion {.size = size};
     commandBuffer.copyBuffer(src, dst, copyRegion);
 
+    endSingleTimeCommands(queue, std::move(commandBuffer));
+}
+
+/*
+ * Issues a command to clear a buffer's contents and set them to 0s.
+ *
+ * Should only be used while setting up the vulkan context and not while drawing
+ * frames.
+ */
+void clearBuffer(Device const &device,
+                CommandPool const &commandPool,
+                Queue const &queue,
+                Buffer &buf,
+                DeviceSize size) {
+
+    // we need to create a command buffer to submit a command to do this
+    CommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
+    commandBuffer.fillBuffer(buf, 0, size, 0);
     endSingleTimeCommands(queue, std::move(commandBuffer));
 }
 
