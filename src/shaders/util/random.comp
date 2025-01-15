@@ -13,7 +13,6 @@ float pgc_random(inout uint seed) {
     return float(word) / 4294967295.0;
 }
 
-// this subdivides the randomness into quadrants as a form of basic low-discrepancy noise.
 /*
  * Gets a randomly-jittered pixel offset based on a quadriant of the pixel as a way to reduce
  * the discrepancy of the noise within pixels.

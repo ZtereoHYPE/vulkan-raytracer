@@ -102,7 +102,7 @@ class Scene {
     explicit Scene(std::filesystem::path path = "scene.yaml");
     std::tuple<size_t, size_t, size_t> getBufferSizes();
     CameraControls getCameraControls();
-    void writeBuffers(void *memory);
+    size_t writeBuffers(void *memory);
 
    private:
     void validateFile();

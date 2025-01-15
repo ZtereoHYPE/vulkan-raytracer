@@ -22,6 +22,7 @@ class RayTracerProgram {
     std::vector<vk::Image> swapChainImages;
     vk::Queue presentQueue;
     vk::Queue computeQueue;
+    vk::CommandPool commandPool;
 
     vk::Pipeline genPipeline;
     vk::Pipeline intPipeline;
@@ -43,8 +44,14 @@ class RayTracerProgram {
     vk::Semaphore imageAvailableSemaphore = VK_NULL_HANDLE;
     vk::Semaphore computeFinishedSemaphore = VK_NULL_HANDLE;
 
-    void* uniformMemoryMap = nullptr;
-    void* sceneMemoryMap = nullptr;
+    void* uniformStagingMap = nullptr;
+    void* sceneStagingMap = nullptr;
+
+    vk::Buffer uniformBuffer;
+    vk::Buffer uniformStagingBuffer;
+
+    vk::Buffer sceneBuffer;
+    vk::Buffer sceneStagingBuffer;
 
     // performance measure
     uint32_t frameCounter = 0;
@@ -78,7 +85,7 @@ class RayTracerProgram {
         // Queue and command pool initialization
         presentQueue = device.getQueue(queueFamilies.presentFamily.value(), 0);
         computeQueue = device.getQueue(queueFamilies.computeFamily.value(), 0);
-        vk::CommandPool commandPool = createCommandPool(device, queueFamilies.computeFamily.value());
+        commandPool = createCommandPool(device, queueFamilies.computeFamily.value());
         computeCommandBuffer = createCommandBuffer(device, commandPool);
 
 
@@ -86,11 +93,18 @@ class RayTracerProgram {
         auto [bvhSize, matSize, triSize] = scene.getBufferSizes();
         printf("log: Total scene size: %lu + %lu + %lu = %lu B\n", bvhSize, matSize, triSize, bvhSize + matSize + triSize);
 
-        auto [uniformBuffer, uniformMemory, uniformMemoryMap] = createMappedBuffer(physicalDevice, device, sizeof(CameraControls), vk::BufferUsageFlagBits::eUniformBuffer);
-        this->uniformMemoryMap = uniformMemoryMap;
+        auto [uniformBuffer, uniformMemory] = createBuffer(physicalDevice, device, sizeof(CameraControls), vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+        auto [sceneBuffer, sceneMemory] = createBuffer(physicalDevice, device, bvhSize + matSize + triSize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-        auto [sceneBuffer, sceneMemory, sceneMemoryMap] = createMappedBuffer(physicalDevice, device, bvhSize + matSize + triSize, vk::BufferUsageFlagBits::eStorageBuffer);
-        this->sceneMemoryMap = sceneMemoryMap;
+        auto [uniformStagingBuffer, uniformStagingMemory, uniformStagingMap] = createMappedBuffer(physicalDevice, device, sizeof(CameraControls), vk::BufferUsageFlagBits::eTransferSrc);
+        auto [sceneStagingBuffer, sceneStagingMemory, sceneStagingMap] = createMappedBuffer(physicalDevice, device, bvhSize + matSize + triSize, vk::BufferUsageFlagBits::eTransferSrc);
+
+        this->uniformStagingMap = uniformStagingMap;
+        this->uniformStagingBuffer = uniformStagingBuffer;
+        this->uniformBuffer = uniformBuffer;
+        this->sceneStagingMap = sceneStagingMap;
+        this->sceneStagingBuffer = sceneStagingBuffer;
+        this->sceneBuffer = sceneBuffer;
 
         size_t rayBufferSize = swapChainExtent.width * swapChainExtent.height * 64; // size of ray
         size_t hitBufferSize = swapChainExtent.width * swapChainExtent.height * 120; // size of hit record
@@ -138,7 +152,7 @@ class RayTracerProgram {
     }
 
     void mainLoop() {
-        scene.writeBuffers(sceneMemoryMap);
+        writeSceneBuffer();
 
         while (!window.shouldClose()) {
             window.pollEvents();
@@ -147,6 +161,11 @@ class RayTracerProgram {
 
         // wait until all submitted stuff is done
         device.waitIdle();
+    }
+
+    void writeSceneBuffer() {
+        size_t size = scene.writeBuffers(sceneStagingMap);
+        copyBuffer(device, commandPool, computeQueue, sceneStagingBuffer, sceneBuffer, size);
     }
 
     void drawFrame() {
@@ -174,7 +193,6 @@ class RayTracerProgram {
 
         computeCommandBuffer.reset();
 
-        updateUniformBuffer(uniformMemoryMap);
         recordComputeCommandBuffer(computeCommandBuffer, imageIndex);
         device.resetFences(computeInFlightFence);
 
@@ -218,6 +236,8 @@ class RayTracerProgram {
         commandBuffer.begin({
             .sType = vk::StructureType::eCommandBufferBeginInfo
         });
+
+        updateUniformBuffer(commandBuffer);
 
         // Transition the layout of the image to one compute shaders can output to (VK_IMAGE_LAYOUT_GENERAL)
         vk::ImageMemoryBarrier layoutTransition = {
@@ -324,15 +344,19 @@ class RayTracerProgram {
         commandBuffer.end();
     }
 
-    void updateUniformBuffer(void* uniformMemoryMap) {
+    void updateUniformBuffer(vk::CommandBuffer commandBuffer) {
         CameraControls ubo = scene.getCameraControls();
         ubo.time = frameCounter;
         // to support scaled monitors
         ubo.resolution = glm::uvec2(swapChainExtent.width, swapChainExtent.height);
 
-        // not super efficient as the memory has to be host-visible and writeable
-        // if this matters at all, push constants could be a solution
-        memcpy(uniformMemoryMap, &ubo, sizeof(ubo));
+        memcpy(uniformStagingMap, &ubo, sizeof(ubo));
+
+        vk::BufferCopy copy {
+            .size = sizeof(ubo)
+        };
+
+        commandBuffer.copyBuffer(uniformStagingBuffer, uniformBuffer, 1, &copy);
     }
 };
 
