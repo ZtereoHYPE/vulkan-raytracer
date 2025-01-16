@@ -62,8 +62,8 @@ CameraControls Scene::getCameraControls() {
     return cameraControls;
 }
 
-/* Write the scene to memory */
-size_t Scene::writeBuffers(void *memory) {
+/* Return the buffer memory for the scene */
+BufferBuilder Scene::getBuffer() {
     BufferBuilder memoryBuf;
     for (auto node : bvh)
         memoryBuf.append(node);
@@ -74,8 +74,7 @@ size_t Scene::writeBuffers(void *memory) {
     for (auto triangle : triangles)
         memoryBuf.append(triangle);
 
-    memoryBuf.write(memory);
-    return memoryBuf.getOffset();
+    return std::move(memoryBuf);
 }
 
 /* This method performs some very basic validation on the scene file */

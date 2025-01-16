@@ -1,13 +1,19 @@
 #pragma once
 
+#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 #include <iostream>
 #include <set>
-#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 #include <vulkan/vulkan.hpp>
 
 #include "../util/util.hpp"
 #include "../window.hpp"
 #include "../config/parameters.hpp"
+#include "../util/buffer-builder.hpp"
+
+/**
+ * This header contains functions used to initialize the vulkan context.
+ */
+
 
 /* 
  * Helper struct representing various supported formats by the SwapChain 
@@ -76,16 +82,15 @@ vk::Extent2D chooseSwapExtent(Window &window, vk::SurfaceCapabilitiesKHR const &
 
 std::vector<vk::ImageView> createSwapchainViews(vk::Device const &device, std::vector<vk::Image> const &swapChainImages, vk::Format swapChainImageFormat);
 
+uint32_t findMemoryType(vk::PhysicalDevice const &physicalDevice, uint32_t suitableMemoryTypes, vk::MemoryPropertyFlags properties);
+
+vk::CommandPool createCommandPool(vk::Device const &device, uint32_t queueFamilyIndex);
+
 std::tuple<vk::Image, vk::ImageView, vk::DeviceMemory>
 createImage(vk::PhysicalDevice const &physicalDevice,
             vk::Device const &device,
             vk::Extent2D extent,
             vk::Format format);
-
-std::tuple<vk::Buffer, vk::DeviceMemory, void*> createMappedBuffer(vk::PhysicalDevice const &physicalDevice,
-                                                                   vk::Device const &device,
-                                                                   vk::DeviceSize size,
-                                                                   vk::BufferUsageFlags usage);
 
 vk::Sampler createSampler(vk::Device const &device);
 
@@ -137,26 +142,18 @@ vk::Pipeline createComputePipeline(vk::Device const &device,
 
 vk::DescriptorPool createDescriptorPool(vk::Device const &device, size_t swapchainSize);
 
-void copyBuffer(vk::Device const &device,
-                vk::CommandPool const &commandPool,
-                vk::Queue const &queue,
-                vk::Buffer &src,
-                vk::Buffer &dst,
-                vk::DeviceSize size);
+vk::Buffer createMappedBuffer(vk::PhysicalDevice const &physicalDevice,
+                              vk::Device const &device,
+                              vk::DeviceSize size,
+                              vk::BufferUsageFlags usage,
+                              vk::DeviceMemory &memory,
+                              void* &memoryMap);
 
-std::tuple<vk::Buffer, vk::DeviceMemory> createBuffer(vk::PhysicalDevice const &physicalDevice,
-                                                      vk::Device const &device,
-                                                      vk::DeviceSize size,
-                                                      vk::BufferUsageFlags usageFlags,
-                                                      vk::MemoryPropertyFlags properties);
+vk::Buffer createBuffer(vk::PhysicalDevice const &physicalDevice,
+                        vk::Device const &device,
+                        vk::DeviceSize size,
+                        vk::BufferUsageFlags usageFlags,
+                        vk::MemoryPropertyFlags properties,
+                        vk::DeviceMemory &bufferMemory);
 
-void transitionImageLayout(vk::Device const &device,
-                           vk::CommandPool const &commandPool,
-                           vk::Queue const &queue,
-                           vk::Image const &image,
-                           vk::ImageLayout oldLayout,
-                           vk::ImageLayout newLayout);
 
-uint32_t findMemoryType(vk::PhysicalDevice const &physicalDevice, uint32_t suitableMemoryTypes, vk::MemoryPropertyFlags properties);
-
-vk::CommandPool createCommandPool(vk::Device const &device, uint32_t queueFamilyIndex);

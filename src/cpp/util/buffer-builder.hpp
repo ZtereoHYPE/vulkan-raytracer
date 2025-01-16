@@ -16,6 +16,7 @@ class BufferBuilder {
    public:
     BufferBuilder();
     BufferBuilder(const BufferBuilder &obj) = delete; // do not allow copies of this class
+    BufferBuilder(BufferBuilder &&obj); // moves are allowed
 
     /**
      * Generic function that appends data to the buffer.

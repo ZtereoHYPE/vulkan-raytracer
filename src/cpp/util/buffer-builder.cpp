@@ -16,6 +16,15 @@ BufferBuilder::BufferBuilder() {
     currentOffset = 0;
 }
 
+/* Move constructor. Trasnfers the ownership of the data and nullifies the old */
+BufferBuilder::BufferBuilder(BufferBuilder&& obj) {
+    currentOffset = obj.currentOffset;
+    currentSize = obj.currentSize;
+    tmpBuffer = obj.tmpBuffer;
+    obj.tmpBuffer = nullptr; // nullify the buffer to avoid frees of the data that got moved
+}
+
+
 /* Gets the current offset within the buffer in bytes. */
 size_t BufferBuilder::getOffset() {
     return currentOffset;
@@ -34,5 +43,5 @@ void BufferBuilder::write(void *memory) {
 /* Destructor. Frees the temporary buffer held by the builder. */
 BufferBuilder::~BufferBuilder() {
     free(tmpBuffer);
-    tmpBuffer = NULL;
+    tmpBuffer = nullptr;
 }

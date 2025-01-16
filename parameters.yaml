@@ -10,7 +10,7 @@ use_llvmpipe: false                   # forces the rendering to happen on the CP
 use_validation_layers: true           # enables vulkan validation layers
 validation_layers:                    # list of enabled validation layers
   - "VK_LAYER_KHRONOS_validation"     #  - standard error checking
-  #- "VK_LAYER_LUNARG_api_dump"       #  - dump in stdout API calls
+#  - "VK_LAYER_LUNARG_api_dump"       #  - dump in stdout API calls
 
 # BVH parameters
 max_bvh_depth: 64                     # maximum depth of the tree

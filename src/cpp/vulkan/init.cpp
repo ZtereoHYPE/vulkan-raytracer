@@ -1,4 +1,4 @@
-#include "vulkan.hpp"
+#include "init.hpp"
 
 using namespace vk;
 
@@ -541,23 +541,26 @@ std::tuple<Image, ImageView, DeviceMemory> createImage(PhysicalDevice const &phy
 /*
  * Creates a memory-mapped buffer ready for use.
  */
-std::tuple<Buffer, DeviceMemory, void*> createMappedBuffer(PhysicalDevice const &physicalDevice,
-                                                           Device const &device,
-                                                           DeviceSize size,
-                                                           BufferUsageFlags usage) {
+Buffer createMappedBuffer(PhysicalDevice const &physicalDevice,
+                          Device const &device,
+                          DeviceSize size,
+                          BufferUsageFlags usage,
+                          DeviceMemory &memory,
+                          void* &memoryMap) {
 
-    auto [buffer, memory] = createBuffer(
+    Buffer buffer = createBuffer(
         physicalDevice,
         device,
         size,
         usage,
-        MemoryPropertyFlagBits::eHostVisible | MemoryPropertyFlagBits::eHostCoherent
+        MemoryPropertyFlagBits::eHostVisible | MemoryPropertyFlagBits::eHostCoherent,
+        memory
     );
 
-    void *memoryMap = device.mapMemory(memory, 0, size);
+    memoryMap = device.mapMemory(memory, 0, size);
     memset(memoryMap, 0, size);
 
-    return std::make_tuple(buffer, memory, memoryMap);
+    return buffer;
 }
 
 /*
@@ -704,14 +707,14 @@ DescriptorSet createGenerateDescriptorSet(Device const &device,
  * Creates description layout and set for the ray-mesh intersection compute stage
  */
 DescriptorSet createIntersectDescriptorSet(Device const &device,
-                             DescriptorPool const &pool,
-                             Buffer const &uniformBuffer,
-                             Buffer const &rayBuffer,
-                             Buffer const &hitBuffer,
-                             Buffer const &sceneBuffer,
-                             uint bvhSize,
-                             uint matSize,
-                             DescriptorSetLayout &layout) {
+                                           DescriptorPool const &pool,
+                                           Buffer const &uniformBuffer,
+                                           Buffer const &rayBuffer,
+                                           Buffer const &hitBuffer,
+                                           Buffer const &sceneBuffer,
+                                           uint bvhSize,
+                                           uint matSize,
+                                           DescriptorSetLayout &layout) {
 
     std::vector types {
         DescriptorType::eUniformBuffer, // camera
@@ -920,78 +923,17 @@ DescriptorPool createDescriptorPool(Device const &device, size_t swapchainSize) 
 }
 
 /*
- * Helper function to begin a single-time command to the GPU.
- *
- * Used for setting up images or buffers.
- */
-CommandBuffer beginSingleTimeCommands(Device const &device, CommandPool const &commandPool) {
-    CommandBuffer commandBuffer = device.allocateCommandBuffers({
-        .sType = StructureType::eCommandBufferAllocateInfo,
-        .commandPool = commandPool,
-        .level = CommandBufferLevel::ePrimary,
-        .commandBufferCount = 1,
-    })[0]; // a bit ugly since allocateCommandBuffers returns an array but we only want the first.
-
-    commandBuffer.begin({
-        .sType = StructureType::eCommandBufferBeginInfo,
-        .flags = CommandBufferUsageFlagBits::eOneTimeSubmit,
-    });
-
-    return commandBuffer;
-}
-
-/*
- * Helper function to end and issue a single-time command to the GPU.
- *
- * Used for setting up images or buffers.
- * The commandBuffer is an rvalue reference to force its destruction in this function.
- */
-void endSingleTimeCommands(Queue const &queue, CommandBuffer &&commandBuffer) {
-    commandBuffer.end();
-
-    SubmitInfo submitInfo {
-        .sType = StructureType::eSubmitInfo,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &commandBuffer,
-    };
-
-    queue.submit(submitInfo, nullptr);
-    queue.waitIdle();
-}
-
-/*
- * Issues a command to copy a buffer from a source to a destination.
- *
- * Should only be used while setting up the vulkan context and not while drawing
- * frames.
- */
-void copyBuffer(Device const &device,
-                CommandPool const &commandPool,
-                Queue const &queue,
-                Buffer &src,
-                Buffer &dst,
-                DeviceSize size) {
-
-    // we need to create a command buffer to submit a command to do this
-    CommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
-
-    BufferCopy copyRegion {.size = size};
-    commandBuffer.copyBuffer(src, dst, copyRegion);
-
-    endSingleTimeCommands(queue, std::move(commandBuffer));
-}
-
-/*
  * Creates a buffer of given size, properties, and adequate to a given set of
  * usages.
  * 
  * Returns the buffer and its bound VkDeviceMemory object.
  */
-std::tuple<Buffer, DeviceMemory> createBuffer(PhysicalDevice const &physicalDevice,
-                                              Device const &device,
-                                              DeviceSize const size,
-                                              BufferUsageFlags const usageFlags,
-                                              MemoryPropertyFlags properties) {
+Buffer createBuffer(PhysicalDevice const &physicalDevice,
+                    Device const &device,
+                    DeviceSize const size,
+                    BufferUsageFlags const usageFlags,
+                    MemoryPropertyFlags properties,
+                    DeviceMemory &memory) {
 
     // create a bugger
     Buffer buffer = device.createBuffer({
@@ -1004,64 +946,16 @@ std::tuple<Buffer, DeviceMemory> createBuffer(PhysicalDevice const &physicalDevi
     // allocate the needed memory
     MemoryRequirements memReqs = device.getBufferMemoryRequirements(buffer);
 
-    auto bufferMemory = device.allocateMemory({
+    memory = device.allocateMemory({
         .sType = StructureType::eMemoryAllocateInfo,
         .allocationSize = memReqs.size,
         .memoryTypeIndex = findMemoryType(physicalDevice, memReqs.memoryTypeBits, properties),
     });
 
     // bind it to our buffer
-    device.bindBufferMemory(buffer, bufferMemory, 0);
+    device.bindBufferMemory(buffer, memory, 0);
 
-    return std::make_tuple(buffer, bufferMemory);
-}
-
-/*
- * Issues a command to initially transition an image to a required
- * layout.
- * 
- * Should only be used while setting up the vulkan context and not while drawing
- * frames.
- */
-void transitionImageLayout(Device const &device,
-                           CommandPool const &commandPool,
-                           Queue const &queue,
-                           Image const &image,
-                           ImageLayout oldLayout,
-                           ImageLayout newLayout) {
-
-    CommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
-
-    // barriers are an easy way to transition image layouts
-    ImageMemoryBarrier barrier {
-        .sType = StructureType::eImageMemoryBarrier,
-        // the image is not being accessed until the barrier is done, so we don't need to specify the stages
-        .srcAccessMask = AccessFlagBits::eNone,
-        .dstAccessMask = AccessFlagBits::eNone,
-        .oldLayout = oldLayout,
-        .newLayout = newLayout,
-        // we aren't transferring ownership
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = image,
-        .subresourceRange = {
-            .aspectMask = ImageAspectFlagBits::eColor,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        },
-    };
-
-    commandBuffer.pipelineBarrier(
-        PipelineStageFlagBits::eBottomOfPipe, PipelineStageFlagBits::eTopOfPipe, // doesn't matter as we manually sync this
-        Flags<DependencyFlagBits>(), // no dependencies
-        nullptr,
-        nullptr,
-        barrier
-    );
-
-    endSingleTimeCommands(queue, std::move(commandBuffer));
+    return buffer;
 }
 
 /*
