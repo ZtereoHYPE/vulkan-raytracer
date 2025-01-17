@@ -1,5 +1,5 @@
 # WARNING: Some of these parameters need the shaders parameters to be tweaked accordingly.
-#          Please update the appropriate parameters in /shaders/util/parameters.comp
+#          Please update the appropriate parameters in src/shaders/util/parameters.comp
 
 # General parameters
 scene_file: "scenes/benchmark.yaml"   # file from which the scene will be loaded

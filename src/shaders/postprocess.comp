@@ -38,7 +38,6 @@ void main() {
     if (coordinates.x < size.x && coordinates.y < size.y) {
         uint idx = coordinates.x + coordinates.y * size.x;
         vec4 color = vec4(raybuffer.rays[idx].light, 1);
-//        vec4 color = vec4(float(raybuffer.rays[idx].count % (SUBDIVISIONS_PER_AXIS * SUBDIVISIONS_PER_AXIS)) / 4.0);
 
         imageStore(framebuffer, coordinates, gamma_correction(color));
     }

@@ -44,6 +44,7 @@ vec3 background_color(Ray ray) {
 /*
  * Schlick's approximation of the Fresnel effect for glass.
  * Approximates the increased reflectivity of glass when seen from a grazing angle.
+ * It assumes that the current / outside IOR is always 1.
  */
 float schlick_reflectance(float cos_angle, float ior) {
     float r0 = (1 - ior) / (1 + ior);

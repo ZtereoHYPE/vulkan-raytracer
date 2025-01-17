@@ -204,6 +204,7 @@ float dist_aabb(Ray ray, BvhNode aabb) {
     vec3 d_min = min(t1, t2);
     vec3 d_max = max(t1, t2);
 
+    // Check if all far intersections happen after all close intersections
     float t_min = max(max(d_min.x, d_min.y), d_min.z);
     float t_max = min(min(d_max.x, d_max.y), d_max.z);
 
