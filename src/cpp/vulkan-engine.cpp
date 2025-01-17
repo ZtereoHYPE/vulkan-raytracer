@@ -19,7 +19,6 @@ void RayTracerProgram::initVulkan() try {
     // Synchronization structure initialization
     vk::SemaphoreCreateInfo semaphoreInfo { .sType = vk::StructureType::eSemaphoreCreateInfo };
     imageAvailableSemaphore = device.createSemaphore(semaphoreInfo);
-    computeFinishedSemaphore = device.createSemaphore(semaphoreInfo);
     computeInFlightFence = device.createFence({
         .sType = vk::StructureType::eFenceCreateInfo,
         .flags = vk::FenceCreateFlagBits::eSignaled // pre-signaled for first frame
@@ -186,8 +185,7 @@ void RayTracerProgram::submitCompute(uint32_t imageIndex) {
         .pWaitDstStageMask = &stage,
         .commandBufferCount = 1,
         .pCommandBuffers = &computeCommandBuffer,
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &computeFinishedSemaphore, // to signal when compute commands are done executing
+        .signalSemaphoreCount = 0,
     };
 
     // signal computeInFlightFence when the command buffer can be reused
@@ -200,8 +198,7 @@ void RayTracerProgram::submitCompute(uint32_t imageIndex) {
 void RayTracerProgram::submitPresent(uint32_t imageIndex) {
     vk::PresentInfoKHR presentInfo {
         .sType = vk::StructureType::ePresentInfoKHR,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &computeFinishedSemaphore, // wait until the compute is done
+        .waitSemaphoreCount = 0,
         .swapchainCount = 1,
         .pSwapchains = &swapChain,
         .pImageIndices = &imageIndex

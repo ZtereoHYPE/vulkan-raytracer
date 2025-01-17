@@ -54,7 +54,6 @@ class RayTracerProgram {
     // Synchronization
     vk::Fence computeInFlightFence;
     vk::Semaphore imageAvailableSemaphore = VK_NULL_HANDLE;
-    vk::Semaphore computeFinishedSemaphore = VK_NULL_HANDLE;
 
     // Performance measure
     uint32_t frameCounter = 0;
