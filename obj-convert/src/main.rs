@@ -59,17 +59,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // loop over each model, adding it to the list of meshes
     for model in models.iter() {
-        let (vertices, normals) = get_mesh_vertices(model);
-        let material = get_material(model, &materials);
+        if let Ok((vertices, normals)) = get_mesh_vertices(model) {
+            let material = get_material(model, &materials);
 
-        meshes.push(Mesh {
-            type_field: "TriMesh", // all OBJs are loaded as triangle meshes
-            material,
-            data: Data {
-                vertices: Box::new(vertices),
-                normals: Box::new(normals),
-            },
-        });
+            meshes.push(Mesh {
+                type_field: "TriMesh", // all OBJs are loaded as triangle meshes
+                material,
+                data: Data {
+                    vertices: Box::new(vertices),
+                    normals: Box::new(normals),
+                },
+            });
+        }
     }
 
     let scene = SceneFile {
@@ -153,7 +154,7 @@ fn get_material(model: &Model, materials: &Vec<Material>) -> SceneMaterial {
  * to two triangles each. OBJ is also indexed whereas the YAML format we use
  * requires raw coordinates for each triangle.
  */
-fn get_mesh_vertices(model: &Model) -> (Vec<f32>, Vec<f32>) {
+fn get_mesh_vertices(model: &Model) -> Result<(Vec<f32>, Vec<f32>), ()> {
     let mesh = &model.mesh;
 
     // Create empty lists
@@ -185,7 +186,8 @@ fn get_mesh_vertices(model: &Model) -> (Vec<f32>, Vec<f32>) {
             } else if mesh.face_arities[face] == 3 {
                 vec![0, 1, 2]
             } else {
-                panic!("only 3 or 4-gons are currently supported.")
+                println!("only 3 or 4-gons are currently supported. Found {}", mesh.face_arities[face]);
+                return Err(());
             };
 
             for idx in indices {
@@ -203,5 +205,5 @@ fn get_mesh_vertices(model: &Model) -> (Vec<f32>, Vec<f32>) {
     }
 
     // return the lists, now populated
-    (vertices, normals)
+    Ok((vertices, normals))
 }
