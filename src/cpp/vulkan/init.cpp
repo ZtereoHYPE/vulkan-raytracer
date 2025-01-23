@@ -147,11 +147,11 @@ DebugUtilsMessengerEXT setupDebugMessenger(Instance const &instance) {
  *
  * Only prints something if the message is of WARNING priority or above.
  */
-VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                                             VkDebugUtilsMessageTypeFlagsEXT messageType,
-                                             const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+VKAPI_ATTR Bool32 VKAPI_CALL debugCallback(DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                             Flags<DebugUtilsMessageTypeFlagBitsEXT> messageFlags,
+                                             const DebugUtilsMessengerCallbackDataEXT* pCallbackData,
                                              void* pUserData) {
-    if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+    if (messageSeverity >= DebugUtilsMessageSeverityFlagBitsEXT::eWarning) {
         std::cerr << std::endl << pCallbackData->pMessage << std::endl;
     }
 
@@ -361,7 +361,7 @@ SwapchainKHR createSwapChain(Window &window,
     }
 
     // out of the ones available for our current device, pick the "best" modes
-    SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceMode(details.formats);
+    SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceMode(physicalDevice, details.formats);
     swapChainExtent = chooseSwapExtent(window, details.capabilities);
 
     uint32_t imageCount = details.capabilities.minImageCount + 1; // to allow "internal operations" to complete
@@ -415,16 +415,15 @@ SwapchainKHR createSwapChain(Window &window,
 /*
  * Returns the image/color format to be used by the SwapChain images.
  */
-SurfaceFormatKHR chooseSwapSurfaceMode(const std::vector<SurfaceFormatKHR>& availableFormats) {
+SurfaceFormatKHR chooseSwapSurfaceMode(PhysicalDevice const &physicalDevice, const std::vector<SurfaceFormatKHR>& availableFormats) {
     for (const auto& availableFormat : availableFormats) {
-        if (availableFormat.format == Format::eR8G8B8A8Unorm && // changed to supported format for compute shaders
-            availableFormat.colorSpace == ColorSpaceKHR::eVkColorspaceSrgbNonlinear) {
+        vk::FormatProperties props = physicalDevice.getFormatProperties(availableFormat.format);
+        if (props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eStorageImage) {
             return availableFormat;
         }
     }
 
-    // else just return whatever the first format is
-    return availableFormats[0];
+    throw std::runtime_error("No supported swapchain format found");
 }
 
 /*

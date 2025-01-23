@@ -1,7 +1,7 @@
 # Compiler and flags
 CXX := g++
 CXXFLAGS := -std=c++26 -g -Wno-pointer-arith -O2
-LDFLAGS := -lglfw3 -lvulkan -ldl -lyaml-cpp
+LDFLAGS := -lglfw -lvulkan -ldl -lyaml-cpp
 SHADER_COMPILER := glslc
 
 # Directories

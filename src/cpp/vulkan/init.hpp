@@ -33,7 +33,7 @@ struct QueueFamilyIndices {
 
     bool isComplete() const {
         return computeFamily.has_value() && presentFamily.has_value();
-    };
+    }
 
     bool areDifferent() const {
         return computeFamily != presentFamily;
@@ -48,10 +48,10 @@ bool allValidationLayersSupported(const std::vector<const char*>& validationLaye
 
 vk::DebugUtilsMessengerEXT setupDebugMessenger(vk::Instance const &instance);
 
-VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                                             VkDebugUtilsMessageTypeFlagsEXT messageType,
-                                             const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-                                             void* pUserData);
+VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                               vk::Flags<vk::DebugUtilsMessageTypeFlagBitsEXT> messageFlags,
+                                               const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                                               void* pUserData);
 
 vk::PhysicalDevice pickPhysicalDevice(vk::Instance const &instance, vk::SurfaceKHR const &surface);
 
@@ -76,7 +76,7 @@ vk::SwapchainKHR createSwapChain(Window &window,
                                  vk::Format& swapChainImageFormat,
                                  vk::Extent2D& swapChainExtent);
 
-vk::SurfaceFormatKHR chooseSwapSurfaceMode(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+vk::SurfaceFormatKHR chooseSwapSurfaceMode(vk::PhysicalDevice const &physicalDevice, const std::vector<vk::SurfaceFormatKHR>& availableFormats);
 
 vk::Extent2D chooseSwapExtent(Window &window, vk::SurfaceCapabilitiesKHR const &capabilities);
 
