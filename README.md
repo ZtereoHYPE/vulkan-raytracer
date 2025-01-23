@@ -18,18 +18,18 @@ However, ray tracing can also be considered an [Embarassingly Parallel](https://
 These showcase the depth of field as well as various materials such as glass.
 
 <div align="middle" float="left">
-    <img src="media/screenshot1.png" width="49%" alt="Project Logo" />
-    <img src="media/screenshot2.png" width="49%" alt="Project Logo" />
+    <img src="media/screenshot1.png" width="41.2%" alt="Render of pheres with focus blur" />
+    <img src="media/screenshot2.png" width="55%" alt="Render of low-poly scene of a lake" />
 </div>
-
+The right screenshot is a render of "Low Poly Lake Scene" by EdwiixGG on Sketchfab
 
 ## Running
 
 ### Dependencies
 This ray tracer uses GLFW to create the window and retrieve the vulkan surface.
-As it stands, the project depends on the C++ libraries `libglfw3`, `vulkan`, and `yaml-cpp`.
+As it stands, the project depends on the C++ libraries `libglfw`, `vulkan`, and `yaml-cpp`.
 
-On Fedora, GLFW was built from source to work properly on Wayland as version 3.4 is not released yet in the repositories. However, depending on your distribution simply installing GLFW from the package manager might work.
+GLFW version 3.4 is required for the project to work properly.
 
 `yaml-cpp` can be installed from your package manager (`yaml-cpp-devel` on fedora), or can be built from the following source: https://github.com/jbeder/yaml-cpp.
 
@@ -54,4 +54,4 @@ make run        # to run it
 - [Fast, Minimum Storage Ray/Triangle Intersection](https://www.graphics.cornell.edu/pubs/1997/MT97.pdf)
 - [Practical Hash-based Owen Scrambling](https://jcgt.org/published/0009/04/01/)
 - [TU Wien Ray Tracing resources](https://www.iue.tuwien.ac.at/phd/ertl/node4.html)
-- And many more coming soon...
+- And many more...
