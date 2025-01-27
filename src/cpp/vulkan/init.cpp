@@ -58,12 +58,15 @@ Instance createInstance() {
     }
 
     auto requiredExtensions = Window::getRequiredExtensions();
+    std::vector<char const *> layers;
 
     // validation layers
     if (params.USE_VALIDATION_LAYERS) {
         if (!allValidationLayersSupported(params.VALIDATION_LAYERS)) {
             throw std::runtime_error("Some validation layers needed aren't supported");
         }
+
+        layers = params.VALIDATION_LAYERS;
         requiredExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
@@ -79,8 +82,8 @@ Instance createInstance() {
     InstanceCreateInfo createInfo {
         .sType = StructureType::eInstanceCreateInfo,
         .pApplicationInfo = &appInfo,
-        .enabledLayerCount = static_cast<uint32_t>(params.VALIDATION_LAYERS.size()),
-        .ppEnabledLayerNames = params.VALIDATION_LAYERS.data(),
+        .enabledLayerCount = static_cast<uint32_t>(layers.size()),
+        .ppEnabledLayerNames = layers.data(),
         .enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size()),
         .ppEnabledExtensionNames = requiredExtensions.data(),
     };
@@ -677,10 +680,10 @@ DescriptorSetLayout createDescriptorSetLayout(Device const &device, std::vector<
  * Creates description layout and set for the ray generation compute stage
  */
 DescriptorSet createGenerateDescriptorSet(Device const &device,
-                            DescriptorPool const &pool,
-                            Buffer const &uniformBuffer,
-                            Buffer const &rayBuffer,
-                            DescriptorSetLayout &layout) {
+                                          DescriptorPool const &pool,
+                                          Buffer const &uniformBuffer,
+                                          Buffer const &rayBuffer,
+                                          DescriptorSetLayout &layout) {
 
     std::vector types{
         DescriptorType::eUniformBuffer, // camera uniform
