@@ -6,6 +6,7 @@ Window::Window(const char *title, uint initialWidth, uint initialHeight) {
 
     // do not use OpenGL
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     auto glfwWindow = glfwCreateWindow((int)initialWidth, (int)initialHeight, title, nullptr, nullptr);
 
     glfwSetWindowUserPointer(glfwWindow, this);
