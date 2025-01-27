@@ -2,7 +2,8 @@
 #          Please update the appropriate parameters in src/shaders/util/parameters.comp
 
 # General parameters
-scene_file: "scenes/benchmark.yaml"   # file from which the scene will be loaded
+scene_file: "scenes/dragon.yaml"      # file from which the scene will be loaded
+shader_dir: "build/shaders"           # directory containing compiled shaders
 tile_size: 8                          # size of tiles used for rendering.
 
 # Vulkan parameters

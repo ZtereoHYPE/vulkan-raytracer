@@ -115,10 +115,10 @@ void RayTracerProgram::initPipelines() {
     stages.addDescriptorSet(createPostProcessDescriptorSet(device, descriptorPool, uniformBuffer, rayBuffer, postDescrLayout));
     stages.addDescriptorSets(createFramebufferDescriptorSets(device, descriptorPool, swapChainImageViews, sampler, frameDescrLayout));
 
-    vk::Pipeline genPipeline = createComputePipeline(device, {genDescrLayout}, "build/shaders/generate.comp.spv", genLayout);
-    vk::Pipeline intPipeline = createComputePipeline(device, {intDescrLayout}, "build/shaders/intersect.comp.spv", intLayout);
-    vk::Pipeline shadePipeline = createComputePipeline(device, {shadeDescrLayout}, "build/shaders/shade.comp.spv", shadeLayout);
-    vk::Pipeline postPipeline = createComputePipeline(device, {postDescrLayout, frameDescrLayout}, "build/shaders/postprocess.comp.spv", postLayout);
+    vk::Pipeline genPipeline = createComputePipeline(device, {genDescrLayout}, params.SHADER_DIR + "/generate.comp.spv", genLayout);
+    vk::Pipeline intPipeline = createComputePipeline(device, {intDescrLayout}, params.SHADER_DIR + "/intersect.comp.spv", intLayout);
+    vk::Pipeline shadePipeline = createComputePipeline(device, {shadeDescrLayout}, params.SHADER_DIR + "/shade.comp.spv", shadeLayout);
+    vk::Pipeline postPipeline = createComputePipeline(device, {postDescrLayout, frameDescrLayout}, params.SHADER_DIR + "/postprocess.comp.spv", postLayout);
 
     stages.addStage(genPipeline, genLayout);
     stages.addStage(intPipeline, intLayout);

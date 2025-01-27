@@ -14,5 +14,6 @@ Parameters::Parameters(std::filesystem::path path)
       MAX_BVH_DEPTH(root["max_bvh_depth"].as<int>()),
       BVH_SPLIT_ATTEMPTS(root["bvh_split_attempts"].as<int>()),
       TILE_SIZE(root["tile_size"].as<int>()),
-      SCENE_FILE(root["scene_file"].as<std::string>())
+      SCENE_FILE(root["scene_file"].as<std::string>()),
+      SHADER_DIR(root["shader_dir"].as<std::string>())
 {};

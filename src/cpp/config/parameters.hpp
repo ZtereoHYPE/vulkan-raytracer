@@ -26,6 +26,7 @@ class Parameters {
     // Rendering parameters
     int const TILE_SIZE;
     std::string SCENE_FILE;
+    std::string SHADER_DIR;
 
     explicit Parameters(std::filesystem::path path = "parameters.yaml");
 };
