@@ -43,3 +43,11 @@ void singleTimeTransitionImageLayout(vk::Device const &device,
                                      vk::Image const &image,
                                      vk::ImageLayout oldLayout,
                                      vk::ImageLayout newLayout);
+
+void dumpImageView(vk::PhysicalDevice const &physicalDevice,
+                   vk::Device const &device,
+                   vk::CommandPool const &commandPool,
+                   vk::Queue const &queue,
+                   vk::Image const &image,
+                   vk::ImageLayout layout,
+                   vk::Extent2D imageExtent);

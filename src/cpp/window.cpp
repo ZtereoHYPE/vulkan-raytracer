@@ -1,39 +1,65 @@
 #include "window.hpp"
 
 /** Construct a window, initializing the glfwWindow. */
-Window::Window(const char *title, uint initialWidth, uint initialHeight) {
+Window::Window(const char *title, uint initialWidth, uint initialHeight)
+:
+    title(title),
+    width(width),
+    height(height)
+{}
+
+void Window::init() {
     glfwInit();
 
     // do not use OpenGL
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    auto glfwWindow = glfwCreateWindow((int)initialWidth, (int)initialHeight, title, nullptr, nullptr);
+    auto glfwWindow = glfwCreateWindow((int)width, (int)width, title, nullptr, nullptr);
 
     glfwSetWindowUserPointer(glfwWindow, this);
     this->glfwWindow = glfwWindow;
+
+    hasInit = true;
 
     printf("log: initialized glfw\n");
 }
 
 /** Terminate and close the window */
 void Window::terminate() const {
+    if (!hasInit) return;
+
     glfwDestroyWindow(this->glfwWindow);
     glfwTerminate();
 }
 
-/** Set the size of the window's framebuffer */
+/** Get the size of the window's framebuffer */
 void Window::getFramebufferSize(int *width, int *height) {
-    glfwGetFramebufferSize(glfwWindow, width, height);
+    if (!hasInit) {
+        *width = this->width; 
+        *height = this->height;
+    } else
+        glfwGetFramebufferSize(glfwWindow, width, height);
 }
 
 /** Poll events that happened to the window such as pressing the close button */
 void Window::pollEvents() {
+    if (!hasInit) return;
     glfwPollEvents();
 }
 
 /** Returns whether the window should close */
 bool Window::shouldClose() {
-    return glfwWindowShouldClose(glfwWindow);
+    if (!hasInit) 
+        return windowShouldClose;
+    else
+        return glfwWindowShouldClose(glfwWindow);
+}
+
+void Window::setShouldClose(bool shouldClose) {
+    if (!hasInit)
+        this->windowShouldClose = shouldClose;
+    else 
+        glfwSetWindowShouldClose(glfwWindow, shouldClose);
 }
 
 /** Creates and returns a surface Vulkan can render to */

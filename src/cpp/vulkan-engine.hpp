@@ -57,6 +57,7 @@ class RayTracerProgram {
 
     // Performance measure
     uint32_t frameCounter = 0;
+    uint32_t imageIndex;
     std::chrono::_V2::system_clock::time_point lastFrame;
 
     void initVulkan();

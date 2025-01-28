@@ -15,5 +15,8 @@ Parameters::Parameters(std::filesystem::path path)
       BVH_SPLIT_ATTEMPTS(root["bvh_split_attempts"].as<int>()),
       TILE_SIZE(root["tile_size"].as<int>()),
       SCENE_FILE(root["scene_file"].as<std::string>()),
-      SHADER_DIR(root["shader_dir"].as<std::string>())
+      SHADER_DIR(root["shader_dir"].as<std::string>()),
+      HEADLESS(root["offscreen_rendering"].as<bool>()),
+      DUMP_FILE(root["dump_file"].as<std::string>()),
+      FRAME_COUNT(root["frame_count"].as<int>())
 {};

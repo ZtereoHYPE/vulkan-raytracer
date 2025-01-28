@@ -28,6 +28,11 @@ class Parameters {
     std::string SCENE_FILE;
     std::string SHADER_DIR;
 
+    // Output parameters
+    bool const HEADLESS;
+    std::string DUMP_FILE;
+    int const FRAME_COUNT;
+
     explicit Parameters(std::filesystem::path path = "parameters.yaml");
 };
 

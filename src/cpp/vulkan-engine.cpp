@@ -4,6 +4,8 @@
  * Main run function that initializes vulkan and starts the loop
  */
 void RayTracerProgram::run() {
+    if (!params.HEADLESS)
+        window.init();
     initVulkan();
     mainLoop();
 }
@@ -41,21 +43,38 @@ void RayTracerProgram::initEnvironment() {
     vk::Instance instance = createInstance();
     vk::DebugUtilsMessengerEXT debugMsgr = setupDebugMessenger(instance);
 
-    vk::SurfaceKHR surface = window.createVulkanSurface(instance);
-    physicalDevice = pickPhysicalDevice(instance, surface);
-    QueueFamilyIndices queueFamilies = findQueueFamilies(physicalDevice, surface); //queue families that will be used
-    device = createLogicalDevice(physicalDevice, queueFamilies);
+    QueueFamilyIndices queueFamilies;
+    if (!params.HEADLESS) {
+        vk::SurfaceKHR surface = window.createVulkanSurface(instance);
+        physicalDevice = pickPhysicalDevice(instance, surface);
 
-    swapChain = createSwapChain(window,
-                                physicalDevice,
-                                device,
-                                surface,
-                                queueFamilies,
-                                swapChainImages,
-                                swapChainImageFormat,
-                                swapChainExtent);
+        queueFamilies = findQueueFamilies(physicalDevice, surface);
+        device = createLogicalDevice(physicalDevice, queueFamilies);
+        presentQueue = device.getQueue(queueFamilies.presentFamily.value(), 0);
 
-    presentQueue = device.getQueue(queueFamilies.presentFamily.value(), 0);
+        swapChain = createSwapChain(window,
+                                    physicalDevice,
+                                    device,
+                                    surface,
+                                    queueFamilies,
+                                    swapChainImages,
+                                    swapChainImageFormat,
+                                    swapChainExtent);
+
+    } else {
+        physicalDevice = pickHeadlessPhysicalDevice(instance);
+
+        queueFamilies = findHeadlessQueueFamilies(physicalDevice);
+        device = createLogicalDevice(physicalDevice, queueFamilies);
+
+        auto res = scene.getCameraControls().resolution;
+        swapChainExtent = vk::Extent2D{res[0], res[1]};
+        swapChainImageFormat = vk::Format::eB8G8R8A8Unorm;
+
+        auto [image, view, memory] = createImage(physicalDevice, device, swapChainExtent, swapChainImageFormat);
+        swapChainImages.push_back(image);
+    }
+
     computeQueue = device.getQueue(queueFamilies.computeFamily.value(), 0);
     commandPool = createCommandPool(device, queueFamilies.computeFamily.value());
     computeCommandBuffer = createCommandBuffer(device, commandPool);
@@ -154,16 +173,21 @@ void RayTracerProgram::drawFrame() {
     if (device.waitForFences(computeInFlightFence, vk::True, UINT64_MAX) == vk::Result::eTimeout)
         throw std::runtime_error("Fence timed out");
 
-    auto [result, imageIndex] = device.acquireNextImageKHR(swapChain, UINT64_MAX, imageAvailableSemaphore);
 
-    // Suboptimal swapchain images are still considered good as they can still be presented
-    // If the swapchain is completely out of date, throw an error as it shouldn't happen.
-    if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
-        throw std::runtime_error("failed to acquire swap chain image!");
+    // if we're beyond the frame 
+    if (frameCounter > params.FRAME_COUNT) {
+        dumpImageView(physicalDevice, device, commandPool, computeQueue, swapChainImages[imageIndex], vk::ImageLayout::ePresentSrcKHR, swapChainExtent);
+        window.setShouldClose(true);
+        return;
     }
 
+    this->imageIndex = params.HEADLESS ? 
+        0 : device.acquireNextImageKHR(swapChain, UINT64_MAX, imageAvailableSemaphore).value;
+
     submitCompute(imageIndex);
-    submitPresent(imageIndex);
+
+    if (!params.HEADLESS)
+        submitPresent(imageIndex);
 
     frameCounter++;
 }
@@ -180,7 +204,7 @@ void RayTracerProgram::submitCompute(uint32_t imageIndex) {
     vk::PipelineStageFlags stage = vk::PipelineStageFlagBits::eComputeShader;
     vk::SubmitInfo submitInfo {
         .sType = vk::StructureType::eSubmitInfo,
-        .waitSemaphoreCount = 1,
+        .waitSemaphoreCount = (uint32_t)(!params.HEADLESS),
         .pWaitSemaphores = &imageAvailableSemaphore,
         .pWaitDstStageMask = &stage,
         .commandBufferCount = 1,
@@ -262,16 +286,17 @@ void RayTracerProgram::recordComputeCommandBuffer(vk::CommandBuffer &commandBuff
     }
 
     // Transition the image to a presentable layout (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-    transitionImageCommand(
-        commandBuffer,
-        swapChainImages[imageIndex],
-        vk::AccessFlagBits::eShaderWrite, // because the shader just wrote to it, caches must be flushed
-        vk::AccessFlagBits::eNone, // invalidate these caches for VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT and later: the layout changed
-        vk::ImageLayout::eGeneral,
-        vk::ImageLayout::ePresentSrcKHR,
-        vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eBottomOfPipe
-    );
+    if (!params.HEADLESS)
+        transitionImageCommand(
+            commandBuffer,
+            swapChainImages[imageIndex],
+            vk::AccessFlagBits::eShaderWrite, // because the shader just wrote to it, caches must be flushed
+            vk::AccessFlagBits::eNone, // invalidate these caches for VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT and later: the layout changed
+            vk::ImageLayout::eGeneral,
+            vk::ImageLayout::ePresentSrcKHR,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eBottomOfPipe
+        );
 
     commandBuffer.end();
 }

@@ -199,3 +199,61 @@ void singleTimeCopyBuffer(Device const &device,
 
     endSingleTimeCommands(queue, std::move(commandBuffer));
 }
+
+/**
+ * Dumps an image to the location specified by params.DUMP_FILE in raw binary format.
+ * 
+ * Makes another image to copy it to a known format, and then a cpu-mapped buffer
+ * to copy that image to.
+ */
+void dumpImageView(PhysicalDevice const &physicalDevice,
+                   Device const &device,
+                   CommandPool const &commandPool,
+                   Queue const &queue,
+                   Image const &image,
+                   ImageLayout layout,
+                   Extent2D imageExtent) {
+
+    // todo: copy to format VK_FORMAT_B8G8R8A8_UINT (41)
+
+    size_t size = 4 * imageExtent.width * imageExtent.height;
+
+    void *map;
+    DeviceMemory bufferMemory;
+    Buffer mappedBuffer = createMappedBuffer(physicalDevice, device, size, BufferUsageFlagBits::eTransferDst, bufferMemory, map);
+
+    CommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
+
+    transitionImageCommand(commandBuffer, 
+                           image, 
+                           AccessFlagBits::eColorAttachmentWrite, 
+                           AccessFlagBits::eColorAttachmentRead, 
+                           layout, 
+                           ImageLayout::eTransferSrcOptimal, 
+                           PipelineStageFlagBits::eTopOfPipe, 
+                           PipelineStageFlagBits::eTransfer);
+
+    BufferImageCopy region {
+        .bufferOffset = 0,
+        .imageSubresource = {
+            .aspectMask = ImageAspectFlagBits::eColor,
+            .mipLevel = 0,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+        .imageOffset = {0, 0, 0},
+        .imageExtent = {imageExtent.width, imageExtent.height, 0},
+    };
+
+    commandBuffer.copyImageToBuffer(image, layout, mappedBuffer, 1, &region);
+    endSingleTimeCommands(queue, std::move(commandBuffer));
+
+    // dump to file
+    std::ofstream fout(params.DUMP_FILE, std::ios::binary);
+    fout.write((char*)map, size);
+    fout.close();
+
+    // free the staging buffer and memory
+    device.freeMemory(bufferMemory);
+    device.destroyBuffer(mappedBuffer);
+}

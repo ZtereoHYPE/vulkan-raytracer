@@ -2,7 +2,9 @@
 
 using namespace vk;
 
-const std::vector deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+const std::vector deviceExtensions = params.HEADLESS 
+    ? std::vector<const char *>{} 
+    : std::vector{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 /**
  * Pointers retrieved and used by vkCreateDebugUtilsMessengerEXT and vkDestroyDebugUtilsMessengerEXT.
@@ -198,6 +200,43 @@ PhysicalDevice pickPhysicalDevice(Instance const &instance, SurfaceKHR const &su
     return *bestDevice;
 }
 
+/**
+ * Headless version of pickPhysicalDevice that doesn't need to concern itself
+ * with the surface the device needs to present to.
+ */
+PhysicalDevice pickHeadlessPhysicalDevice(Instance const &instance) {
+    auto physicalDevices = instance.enumeratePhysicalDevices();
+
+    if (physicalDevices.empty()) {
+        throw std::runtime_error("failed to find GPUs with Vulkan support!");
+    }
+
+    int bestScore = 0;
+    PhysicalDevice const *bestDevice = VK_NULL_HANDLE;
+
+    for (const auto& device : physicalDevices) {
+        QueueFamilyIndices familyIndexes = findHeadlessQueueFamilies(device);
+    
+        if (!familyIndexes.computeFamily.has_value()) continue;
+
+        if (const int score = getHeadlessDeviceScore(device); score > bestScore) {
+            bestDevice = &device;
+            bestScore = score;
+        }
+    }
+
+    if (bestDevice == VK_NULL_HANDLE) {
+        throw std::runtime_error("failed to find a suitable GPU (headless)!");
+    }
+
+    // get device name
+    auto properties = bestDevice->getProperties();
+
+    printf("log: picked headless device %s\n", properties.deviceName.data());
+
+    return *bestDevice;
+}
+
 /* 
  * Checks if a device is suitable for rendering on a surface.
  *
@@ -271,11 +310,32 @@ int getDeviceScore(PhysicalDevice const &device, SurfaceKHR const &surface) {
 }
 
 /*
+ * Gives a score to a physical device for headless rendering.
+ * 
+ * If LLVMPIPE is needed, then its corresponding "device" gets maximum score.
+ * Else, discrete graphics cards get a higher score, followed by the various
+ * queues being in the same family.
+ */
+int getHeadlessDeviceScore(PhysicalDevice const &device) {
+    // discrete GPUs get the absolute priority
+    const auto properties = device.getProperties();
+    const bool isDiscrete = properties.deviceType == PhysicalDeviceType::eDiscreteGpu;
+
+    // if we need to use llvmpipe then finding it has positive value, else negative value
+    const bool isLlvmpipe = std::string(properties.deviceName).find("llvmpipe") != std::string::npos;
+    const int llvmpipeScore = params.USE_LLVMPIPE ? 100 : -100;
+
+    const int score = isLlvmpipe * llvmpipeScore + isDiscrete;
+
+    return score;
+}
+
+/*
  * Finds a device's queue family indices, including whether the device supports
  * presenting to the given surface.
  */
 QueueFamilyIndices findQueueFamilies(PhysicalDevice const &device, SurfaceKHR const &surface) {
-    QueueFamilyIndices indices = {};
+    QueueFamilyIndices indices{};
 
     auto families = device.getQueueFamilyProperties();
 
@@ -301,6 +361,26 @@ QueueFamilyIndices findQueueFamilies(PhysicalDevice const &device, SurfaceKHR co
     return indices;
 }
 
+/**
+ * Headless version of findQueueFamilies, doesn't need to concern itself with
+ * the surface being rendered to.
+ */
+QueueFamilyIndices findHeadlessQueueFamilies(PhysicalDevice const &device) {
+    QueueFamilyIndices indices{};
+
+    auto families = device.getQueueFamilyProperties();
+
+    int currentFamily = 0;
+    for (const auto& family : families) {
+        if (family.queueFlags & QueueFlagBits::eCompute) {
+            indices.computeFamily = currentFamily;
+            break;
+        }
+    }
+
+    return indices;
+}
+
 /*
  * Creates a logical device from the given physical device and chosen queue 
  * family indices. This device represents the interface between our program and
@@ -311,9 +391,12 @@ Device createLogicalDevice(PhysicalDevice const &physicalDevice, QueueFamilyIndi
     std::vector<DeviceQueueCreateInfo> queueCreateInfos;
 
     std::set uniqueQueueFamilies = {
-        queueIndices.presentFamily.value(),
         queueIndices.computeFamily.value()
     };
+
+    // optional present family for offscreen rendering
+    if (queueIndices.presentFamily.has_value())
+        uniqueQueueFamilies.insert(queueIndices.presentFamily.value());
 
     float queuePriority = 1.0f;
     for (uint32_t family : uniqueQueueFamilies) {

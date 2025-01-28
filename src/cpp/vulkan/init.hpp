@@ -55,6 +55,8 @@ VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlag
 
 vk::PhysicalDevice pickPhysicalDevice(vk::Instance const &instance, vk::SurfaceKHR const &surface);
 
+vk::PhysicalDevice pickHeadlessPhysicalDevice(vk::Instance const &instance);
+
 bool isDeviceSuitable(vk::PhysicalDevice const &device, vk::SurfaceKHR const &surface);
 
 bool checkDeviceExtensionSupport(vk::PhysicalDevice const &device, std::vector<const char*> deviceExtensions);
@@ -63,7 +65,11 @@ SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice &device, 
 
 int getDeviceScore(vk::PhysicalDevice const &device, vk::SurfaceKHR const &surface);
 
+int getHeadlessDeviceScore(vk::PhysicalDevice const &device);
+
 QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice const &device, vk::SurfaceKHR const &surface);
+
+QueueFamilyIndices findHeadlessQueueFamilies(vk::PhysicalDevice const &device);
 
 vk::Device createLogicalDevice(vk::PhysicalDevice const &physicalDevice, QueueFamilyIndices const &queueIndices);
 

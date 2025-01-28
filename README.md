@@ -73,6 +73,12 @@ validation_layers:                    # list of enabled validation layers
 max_bvh_depth: 64                     # maximum depth of the tree
 bvh_split_attempts: 8                 # amount of splits performed to find the optimal BVH.
                                       #  set to -1 to attempt all possible splits.
+
+# Output parameters
+offscreen_rendering: false            # enable to render on headless devices
+dump_file: "./dump.raw"               # file where the final framebuffer will be dumped
+frame_count: -1                       # number frames to render before dumping the output
+                                      #  set to -1 to let render indefinitely
 ```
 
 ### Scene file
