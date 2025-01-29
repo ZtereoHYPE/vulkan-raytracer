@@ -5,7 +5,7 @@ constexpr size_t INITIAL_SIZE = 16;
 void BufferBuilder::growTmpBuffer() {
     currentSize *= 2;
     tmpBuffer = realloc(tmpBuffer, currentSize);
-    memset(tmpBuffer + (currentSize / 2), 0, (currentSize / 2));
+    memset((char*)tmpBuffer + (currentSize / 2), 0, (currentSize / 2));
 }
 
 

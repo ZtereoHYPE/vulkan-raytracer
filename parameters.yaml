@@ -2,13 +2,13 @@
 #          Please update the appropriate parameters in src/shaders/util/parameters.comp
 
 # General parameters
-scene_file: "scenes/spheres.yaml"     # file from which the scene will be loaded
+scene_file: "scenes/cornell.yaml"     # file from which the scene will be loaded
 shader_dir: "build/shaders"           # directory containing compiled shaders
 tile_size: 8                          # size of tiles used for rendering.
 
 # Vulkan parameters
 use_llvmpipe: false                   # forces the rendering to happen on the CPU
-use_validation_layers: true           # enables vulkan validation layers
+use_validation_layers: false          # enables vulkan validation layers
 validation_layers:                    # list of enabled validation layers
   - "VK_LAYER_KHRONOS_validation"     #  - standard error checking
 #  - "VK_LAYER_LUNARG_api_dump"       #  - dump in stdout API calls

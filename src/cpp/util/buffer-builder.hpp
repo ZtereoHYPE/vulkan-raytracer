@@ -27,8 +27,7 @@ class BufferBuilder {
         while (currentSize <= currentOffset + sizeof(T))
             growTmpBuffer();
 
-        // this is a GCC-ism.
-        memcpy(tmpBuffer + currentOffset, &value, sizeof(T));
+        memcpy((char*)tmpBuffer + currentOffset, &value, sizeof(T));
         currentOffset += sizeof(T);
     }
 

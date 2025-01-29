@@ -68,8 +68,8 @@ void transitionImageCommand(CommandBuffer const &commandBuffer,
         .dstAccessMask = invalidateCaches,
         .oldLayout = oldLayout,
         .newLayout = newLayout,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, // we assume we aren't transferring ownership
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .srcQueueFamilyIndex = QueueFamilyIgnored, // we assume we aren't transferring ownership
+        .dstQueueFamilyIndex = QueueFamilyIgnored,
         .image = image,
         .subresourceRange = {
             .aspectMask = ImageAspectFlagBits::eColor,
@@ -274,11 +274,27 @@ void dumpImageView(PhysicalDevice const &physicalDevice,
         },
     };
     commandBuffer.blitImage(framebuffer, layout, image, ImageLayout::eGeneral, 1, &imageBlit, Filter::eNearest);
+    
+    ImageMemoryBarrier imagebarrier {
+        .sType = StructureType::eImageMemoryBarrier,
+        .srcAccessMask = AccessFlagBits::eTransferWrite,
+        .dstAccessMask = AccessFlagBits::eTransferRead,
+        .oldLayout = ImageLayout::eGeneral,
+        .newLayout = ImageLayout::eGeneral,
+        .srcQueueFamilyIndex = QueueFamilyIgnored,
+        .dstQueueFamilyIndex = QueueFamilyIgnored,
+        .image = image,
+        .subresourceRange = {
+            .aspectMask = ImageAspectFlagBits::eColor,
+            .levelCount = 1,
+            .layerCount = 1,
+        }
+    };
 
     commandBuffer.pipelineBarrier(PipelineStageFlagBits::eTransfer,
                                   PipelineStageFlagBits::eTransfer,
                                   DependencyFlags(0),
-                                  nullptr, nullptr, nullptr);
+                                  nullptr, nullptr, imagebarrier);
 
     BufferImageCopy bufferRegion {
         .bufferOffset = 0,
