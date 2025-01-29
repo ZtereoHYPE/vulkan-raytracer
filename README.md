@@ -116,6 +116,27 @@ scene:
     vertices: [1, 2, 3, ...]
     normals: [4, 5, 6, ...]
 ```
+
+## Additional programs
+Two additional programs are included in the repo to facilitate the usage of the ray tracer.
+### obj-convert
+This program converts an obj file (and its associated .mlt) into the ray tracer's scene format.
+
+Usage, while in obj-convert directory:
+```bash
+cargo run ./path/to/objfile.obj
+```
+This will result in a `scene.yaml` file.
+
+### dump-convert
+This program converts the framebuffer dump into a viewable PNG image.
+
+Usage, while in dump-convert directory:
+```bash
+cargo run ./path/to/dump.raw imageWidth imageHeight
+```
+This will output a PNG image. Make sure that imageWidth and imageHeight are the correct dimensions of the framebuffer.
+
 ## Screenshots
 These showcase the depth of field as well as various materials such as glass.
 
