@@ -210,50 +210,95 @@ void dumpImageView(PhysicalDevice const &physicalDevice,
                    Device const &device,
                    CommandPool const &commandPool,
                    Queue const &queue,
-                   Image const &image,
+                   Image const &framebuffer,
                    ImageLayout layout,
                    Extent2D imageExtent) {
 
-    // todo: copy to format VK_FORMAT_B8G8R8A8_UINT (41)
+    // Step 1: create an image with known tiling, format, and size
+    Image image = device.createImage({ 
+        .sType = StructureType::eImageCreateInfo,
+        .imageType = ImageType::e2D,
+        .format = vk::Format::eB8G8R8A8Unorm,
+        .extent = {imageExtent.width, imageExtent.height, 1},
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = SampleCountFlagBits::e1,
+        .tiling = ImageTiling::eLinear,
+        .usage = ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eTransferDst,
+        .sharingMode = SharingMode::eExclusive,
+        .initialLayout = ImageLayout::eUndefined
+    });
+    MemoryRequirements memRequirements = device.getImageMemoryRequirements(image);
+    DeviceMemory imageMemory = device.allocateMemory({
+        .sType = StructureType::eMemoryAllocateInfo,
+        .allocationSize = memRequirements.size,
+        .memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, MemoryPropertyFlagBits::eDeviceLocal),
+    });
+    device.bindImageMemory(image, imageMemory, 0);
 
+
+    // Step 2: Create a CPU-mapped buffer
     size_t size = 4 * imageExtent.width * imageExtent.height;
 
     void *map;
     DeviceMemory bufferMemory;
     Buffer mappedBuffer = createMappedBuffer(physicalDevice, device, size, BufferUsageFlagBits::eTransferDst, bufferMemory, map);
 
-    CommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
 
-    transitionImageCommand(commandBuffer, 
-                           image, 
-                           AccessFlagBits::eColorAttachmentWrite, 
-                           AccessFlagBits::eColorAttachmentRead, 
-                           layout, 
-                           ImageLayout::eTransferSrcOptimal, 
-                           PipelineStageFlagBits::eTopOfPipe, 
+    // Step 3: Copy the framebuffer to the image, and then to the cpu buffer
+    CommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
+    transitionImageCommand(commandBuffer, image,
+                           AccessFlagBits::eNone,
+                           AccessFlagBits::eTransferRead,
+                           ImageLayout::eUndefined,
+                           ImageLayout::eGeneral,
+                           PipelineStageFlagBits::eTopOfPipe,
                            PipelineStageFlagBits::eTransfer);
 
-    BufferImageCopy region {
-        .bufferOffset = 0,
-        .imageSubresource = {
-            .aspectMask = ImageAspectFlagBits::eColor,
-            .mipLevel = 0,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-        },
-        .imageOffset = {0, 0, 0},
-        .imageExtent = {imageExtent.width, imageExtent.height, 0},
+    ImageSubresourceLayers subresource {
+        .aspectMask = ImageAspectFlagBits::eColor,
+        .mipLevel = 0,
+        .baseArrayLayer = 0,
+        .layerCount = 1
     };
+    ImageBlit imageBlit {
+        .srcSubresource = subresource,
+        .srcOffsets = std::array {
+            Offset3D {0, 0, 0},
+            Offset3D {(int32_t)imageExtent.width, (int32_t)imageExtent.height, 1},
+        },
+        .dstSubresource = subresource,
+        .dstOffsets = std::array {
+            Offset3D {0, 0, 0},
+            Offset3D {(int32_t)imageExtent.width, (int32_t)imageExtent.height, 1},
+        },
+    };
+    commandBuffer.blitImage(framebuffer, layout, image, ImageLayout::eGeneral, 1, &imageBlit, Filter::eNearest);
 
-    commandBuffer.copyImageToBuffer(image, layout, mappedBuffer, 1, &region);
+    commandBuffer.pipelineBarrier(PipelineStageFlagBits::eTransfer,
+                                  PipelineStageFlagBits::eTransfer,
+                                  DependencyFlags(0),
+                                  nullptr, nullptr, nullptr);
+
+    BufferImageCopy bufferRegion {
+        .bufferOffset = 0,
+        .imageSubresource = subresource,
+        .imageOffset = {0, 0, 0},
+        .imageExtent = {imageExtent.width, imageExtent.height, 1},
+    };
+    commandBuffer.copyImageToBuffer(image, ImageLayout::eGeneral, mappedBuffer, 1, &bufferRegion);
+
     endSingleTimeCommands(queue, std::move(commandBuffer));
 
-    // dump to file
+
+    // Step 4: dump to file
     std::ofstream fout(params.DUMP_FILE, std::ios::binary);
-    fout.write((char*)map, size);
+    fout.write(static_cast<char*>(map), static_cast<long>(size));
     fout.close();
 
     // free the staging buffer and memory
     device.freeMemory(bufferMemory);
     device.destroyBuffer(mappedBuffer);
+    device.freeMemory(imageMemory);
+    device.destroyImage(image);
 }

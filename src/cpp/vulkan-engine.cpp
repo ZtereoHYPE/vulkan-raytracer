@@ -170,21 +170,28 @@ void RayTracerProgram::drawFrame() {
 
     // No need to fence on the presentation as we only start computing when the next swapchain image is available
     // We do need to fence on compute because we'll get a new image while the previous is still computing!
-    if (device.waitForFences(computeInFlightFence, vk::True, UINT64_MAX) == vk::Result::eTimeout)
-        throw std::runtime_error("Fence timed out");
-
-
-    // if we're beyond the frame 
-    if (frameCounter > params.FRAME_COUNT) {
-        dumpImageView(physicalDevice, device, commandPool, computeQueue, swapChainImages[imageIndex], vk::ImageLayout::ePresentSrcKHR, swapChainExtent);
-        window.setShouldClose(true);
-        return;
-    }
+    device.waitForFences(computeInFlightFence, vk::True, UINT64_MAX);
 
     this->imageIndex = params.HEADLESS ? 
         0 : device.acquireNextImageKHR(swapChain, UINT64_MAX, imageAvailableSemaphore).value;
 
     submitCompute(imageIndex);
+
+    // if we're beyond the frame 
+    if (frameCounter >= params.FRAME_COUNT) {
+        device.waitForFences(computeInFlightFence, vk::True, UINT64_MAX);
+
+        dumpImageView(physicalDevice, 
+                      device, 
+                      commandPool, 
+                      computeQueue, 
+                      swapChainImages[imageIndex], 
+                      vk::ImageLayout::eGeneral, 
+                      swapChainExtent);
+        
+        window.setShouldClose(true);
+        return;
+    }
 
     if (!params.HEADLESS)
         submitPresent(imageIndex);
@@ -286,7 +293,7 @@ void RayTracerProgram::recordComputeCommandBuffer(vk::CommandBuffer &commandBuff
     }
 
     // Transition the image to a presentable layout (VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-    if (!params.HEADLESS)
+    if (frameCounter < params.FRAME_COUNT && !params.HEADLESS)
         transitionImageCommand(
             commandBuffer,
             swapChainImages[imageIndex],

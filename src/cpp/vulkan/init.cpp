@@ -478,7 +478,7 @@ SwapchainKHR createSwapChain(Window &window,
         .imageColorSpace = surfaceFormat.colorSpace,
         .imageExtent = swapChainExtent,
         .imageArrayLayers = 1,
-        .imageUsage = ImageUsageFlagBits::eStorage,
+        .imageUsage = ImageUsageFlagBits::eStorage | ImageUsageFlagBits::eTransferSrc,
         .imageSharingMode = sharingMode,
         .queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size()),
         .pQueueFamilyIndices = queueFamilyIndices.data(),
@@ -587,7 +587,7 @@ std::tuple<Image, ImageView, DeviceMemory> createImage(PhysicalDevice const &phy
         .arrayLayers = 1,
         .samples = SampleCountFlagBits::e1,
         .tiling = ImageTiling::eOptimal,
-        .usage = ImageUsageFlagBits::eSampled | ImageUsageFlagBits::eStorage, // todo: some images are just one or the other
+        .usage = ImageUsageFlagBits::eTransferSrc | ImageUsageFlagBits::eStorage,
         .sharingMode = SharingMode::eExclusive, // only ever accessed by 1 family at a time
         .initialLayout = ImageLayout::eUndefined
     };

@@ -4,8 +4,8 @@
 Window::Window(const char *title, uint initialWidth, uint initialHeight)
 :
     title(title),
-    width(width),
-    height(height)
+    width(initialWidth),
+    height(initialHeight)
 {}
 
 void Window::init() {
@@ -14,7 +14,7 @@ void Window::init() {
     // do not use OpenGL
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    auto glfwWindow = glfwCreateWindow((int)width, (int)width, title, nullptr, nullptr);
+    auto glfwWindow = glfwCreateWindow((int)width, (int)height, title, nullptr, nullptr);
 
     glfwSetWindowUserPointer(glfwWindow, this);
     this->glfwWindow = glfwWindow;
