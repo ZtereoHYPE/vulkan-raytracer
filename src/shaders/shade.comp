@@ -37,7 +37,7 @@ layout(std430, set = 0, binding = 3) readonly buffer HitBuffer {
  * By default, it's a gradient from two blue-ish colors simulating a sky.
  */
 vec3 background_color(Ray ray) {
-    float blend = 0.5 * ray.direction.y + 0.5;
+    float blend = clamp(0.5 * ray.direction.y + 0.5, 0.0, 1.0);
     return mix(vec3(0.6, 0.8, 1.0), vec3(0.2, 0.4, 1.0), blend);
 }
 
