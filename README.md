@@ -14,7 +14,7 @@ The main disadvantage of ray tracing is its speed, or rather lack of, as calcula
 However, ray tracing can also be considered an [Embarassingly Parallel](https://en.wikipedia.org/wiki/Embarrassingly_parallel) problem, meaning that it can scale incredibly well with parallelization. This renders it an ideal candidate to be executed on graphics cards.
 
 ## Dependencies
-As it stands, the project depends on the `glfw`, `vulkan`, and `yaml-cpp` system libraries.
+On top of make and a c++ compiler, the project depends on the `glfw`, `vulkan`, and `yaml-cpp` system libraries.
 
 GLFW version 3.4 is required for the project to work properly on modern desktop environments.
 
