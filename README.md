@@ -14,24 +14,24 @@ The main disadvantage of ray tracing is its speed, or rather lack of, as calcula
 However, ray tracing can also be considered an [Embarassingly Parallel](https://en.wikipedia.org/wiki/Embarrassingly_parallel) problem, meaning that it can scale incredibly well with parallelization. This renders it an ideal candidate to be executed on graphics cards.
 
 ## Dependencies
-On top of make and a c++ compiler, the project depends on the `glfw`, `vulkan`, and `yaml-cpp` system libraries.
+On top of make, GCC 14, and glslc, the project depends on `glfw`, `vulkan`, `glm`, and `yaml-cpp` system libraries.
 
 GLFW version 3.4 is required for the project to work properly on modern desktop environments.
 
 To install on Fedora:
 ```bash
-sudo dnf install vulkan glfw glfw-devel yaml-cpp yaml-cpp-devel
+sudo dnf install vulkan vulkan-headers vulkan-loader-devel glm-devel glslc glfw glfw-devel yaml-cpp yaml-cpp-devel
 ```
-To install on Debian:
-```bash
-sudo apt install libvulkan1 mesa-vulkan-drivers yaml-cpp libyaml-cpp-dev libglfw3 libglfw3-dev
-```
+
 To install on Arch:
 
 Replace [your vulkan drivers] based on [your device](https://wiki.archlinux.org/title/Vulkan)
 ```bash
-sudo pacman -S [your vulkan drivers] yaml-cpp glfw
+sudo pacman -S [your vulkan drivers] vulkan-headers vulkan-validation-layers vulkan-swrast yaml-cpp glfw glm shaderc
 ```
+
+Unfortunately debian does not provide modern enough versions of the required packages and GCC.
+
 
 #### Vulkan SDK
 To be able to use all the validation layers, the full Vulkan SDK is needed, which can be installed at: https://www.lunarg.com/vulkan-sdk/
