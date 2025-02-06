@@ -8,8 +8,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Read user input
     let args: Vec<String> = env::args().collect();
     let path = &args[1];
-    let width = (&args)[2].parse::<u32>().expect("usage: filename width height");
-    let height = (&args)[3].parse::<u32>().expect("usage: filename width height");
+    let width: u32 = (&args)[2].parse().expect("usage: filename width height");
+    let height: u32 = (&args)[3].parse().expect("usage: filename width height");
 
 
     // Read the dump file and convert the data
@@ -19,6 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         pixel[0] = pixel[2];
         pixel[2] = swap;
     }
+    
 
     // Encode as PNG
     let path = Path::new(r"output.png");

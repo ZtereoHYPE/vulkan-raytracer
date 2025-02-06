@@ -4,6 +4,7 @@
 #include <iostream>
 #include <set>
 #include <vulkan/vulkan.hpp>
+#include <optional>
 
 #include "../util/util.hpp"
 #include "../window.hpp"

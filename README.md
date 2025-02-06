@@ -5,7 +5,7 @@
 
 The goal of this project is to build a moderately capable ray tracer, able to render sphere and triangle meshes with various material types, using the GPU API Vulkan to interface with the GPU.
 
-## Context
+# Context
 A common project to get programmers familiar with photorealistic rendering is to build
 a ray tracer, which is a program that simulates the path that individual light rays would take in a scene, and is able to output realistic-looking images because of it.
 
@@ -13,32 +13,41 @@ The main disadvantage of ray tracing is its speed, or rather lack of, as calcula
 
 However, ray tracing can also be considered an [Embarassingly Parallel](https://en.wikipedia.org/wiki/Embarrassingly_parallel) problem, meaning that it can scale incredibly well with parallelization. This renders it an ideal candidate to be executed on graphics cards.
 
-## Dependencies
-On top of make, GCC 14, and glslc, the project depends on `glfw`, `vulkan`, `glm`, and `yaml-cpp` system libraries.
+# Dependencies
+On top of make, GCC 12, and glslc, the project depends on `glfw`, `vulkan`, `glm`, and `yaml-cpp` system libraries.
 
 GLFW version 3.4 is required for the project to work properly on modern desktop environments.
 
-To install on Fedora:
+### To install on Fedora:
 ```bash
 sudo dnf install vulkan vulkan-headers vulkan-loader-devel glm-devel glslc glfw glfw-devel yaml-cpp yaml-cpp-devel
 ```
 
-To install on Arch:
+### To install on Arch:
 
 Replace [your vulkan drivers] based on [your device](https://wiki.archlinux.org/title/Vulkan)
 ```bash
 sudo pacman -S [your vulkan drivers] vulkan-headers vulkan-validation-layers vulkan-swrast yaml-cpp glfw glm shaderc
 ```
 
-Unfortunately debian does not provide modern enough versions of the required packages and GCC.
+### To install on Debian/Ubuntu:
 
+Since Debian and Ubuntu ship older versions of the Vulkan headers, the full SDK needs to be downloaded from LunarG's website.
 
-#### Vulkan SDK
-To be able to use all the validation layers, the full Vulkan SDK is needed, which can be installed at: https://www.lunarg.com/vulkan-sdk/
+Instructions can be found on https://vulkan.lunarg.com/sdk/home#linux. Here's how to install the latest Vulkan SDK on Ubuntu 22:
+```bash
+wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-1.4.304-noble.list https://packages.lunarg.com/vulkan/1.4.304/lunarg-vulkan-1.4.304-noble.list
+sudo apt update
+sudo apt install vulkan-sdk
+```
 
-Alternatively, you can use your package manager's versions, but your mileage may vary.
+Other dependencies are also needed to compile the project:
+```bash
+sudo apt install libyaml-cpp-dev libglfw3 libglfw3-dev libglm-dev
+```
 
-## Building and Running
+# Building and Running
 
 The project is compiled and run by the included make file:
 
@@ -46,7 +55,7 @@ The project is compiled and run by the included make file:
 make compile    # to compile the project
 make run        # to run it
 ```
-## File formats
+# File formats
 The program uses two different file formats to load and render the various scenes:
 
 ### Parameters
@@ -117,7 +126,7 @@ scene:
     normals: [4, 5, 6, ...]
 ```
 
-## Additional programs
+# Additional programs
 Two additional programs are included in the repo to facilitate the usage of the ray tracer.
 ### obj-convert
 This program converts an obj file (and its associated .mlt) into the ray tracer's scene format.
@@ -137,7 +146,7 @@ cargo run ./path/to/dump.raw imageWidth imageHeight
 ```
 This will output a PNG image. Make sure that imageWidth and imageHeight are the correct dimensions of the framebuffer.
 
-## Screenshots
+# Screenshots
 These showcase the depth of field as well as various materials such as glass.
 
 <div align="middle" float="left">
@@ -146,7 +155,7 @@ These showcase the depth of field as well as various materials such as glass.
 </div>
 The right screenshot is a render of "Low Poly Lake Scene" by EdwiixGG on Sketchfab
 
-## References
+# References
 - [Ray Tracing Gems](https://www.realtimerendering.com/raytracinggems/rtg/index.html)
 - [Ray Tracing in a Weekend](https://raytracing.github.io/books/RayTracingInOneWeekend.html)
 - [Ray Tracing the Next Weekend](https://raytracing.github.io/books/RayTracingTheNextWeek.html)

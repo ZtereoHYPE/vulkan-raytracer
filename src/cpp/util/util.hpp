@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <array>
 #include <stdexcept>
 #include <glm/glm.hpp>
 
