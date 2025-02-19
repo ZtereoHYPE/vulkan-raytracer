@@ -43,6 +43,8 @@ struct QueueFamilyIndices {
 
 void retrieveDebugMessengerPointers(vk::Instance const &instance);
 
+const std::vector<const char *> getDeviceExtensions();
+
 vk::Instance createInstance();
 
 bool allValidationLayersSupported(const std::vector<const char*>& validationLayers);
@@ -146,6 +148,10 @@ vk::Pipeline createComputePipeline(vk::Device const &device,
                                    std::vector<vk::DescriptorSetLayout> const &descriptorSetLayouts,
                                    std::string const &shaderPath,
                                    vk::PipelineLayout &layout);
+
+vk::Pipeline createRayTracingPipeline(vk::Device const &device,
+                                      std::vector<vk::DescriptorSetLayout> const &descriptorSetLayouts,
+                                      vk::PipelineLayout &layout);
 
 vk::DescriptorPool createDescriptorPool(vk::Device const &device, size_t swapchainSize);
 

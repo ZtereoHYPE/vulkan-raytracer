@@ -95,3 +95,39 @@ void main() {
             raybuffer.rays[idx] = generate_ray(coordinates, raybuffer.rays[idx]);
     }
 }
+
+layout(std430, set = 0, binding = 0) uniform Camera {
+    uvec2 resolution;
+    vec2 uv;
+    float focal_len;
+    float focus_distance;
+    float aperture_radius;
+    uint frame;
+    vec4 origin;
+    mat4 rotation;
+} camera;
+
+layout(std430, set = 0, binding = 1) readonly buffer RayBuffer {
+    Ray rays[];
+} raybuffer;
+
+layout(set = 1, binding = 0) writeonly uniform image2D framebuffer;
+
+/* Quick gamma correction approximation for gamma of 2.0 */
+vec4 gamma_correction(vec4 color) {
+    return sqrt(color);
+}
+
+/* Entrypoint */
+void main() {
+    ivec2 coordinates = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = ivec2(camera.resolution);
+
+    if (coordinates.x < size.x && coordinates.y < size.y) {
+        uint idx = coordinates.x + coordinates.y * size.x;
+        vec4 color = vec4(raybuffer.rays[idx].light, 1);
+
+        imageStore(framebuffer, coordinates, gamma_correction(color));
+    }
+}
+

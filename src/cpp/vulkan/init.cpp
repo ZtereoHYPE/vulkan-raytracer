@@ -2,9 +2,7 @@
 
 using namespace vk;
 
-const std::vector deviceExtensions = params.HEADLESS 
-    ? std::vector<const char *>{} 
-    : std::vector{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+const std::vector deviceExtensions = getDeviceExtensions();
 
 /**
  * Pointers retrieved and used by vkCreateDebugUtilsMessengerEXT and vkDestroyDebugUtilsMessengerEXT.
@@ -47,6 +45,21 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(VkInstance instance,
                                                            VkDebugUtilsMessengerEXT messenger,
                                                            VkAllocationCallbacks const * pAllocator) {
     return destroyDebugUtilsMessengerPointer(instance, messenger, pAllocator);
+}
+
+const std::vector<const char *> getDeviceExtensions() {
+    // these are required for hardware accelerated ray tracing
+	std::vector<const char *> extensions{
+		VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+        VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+        VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
+        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME
+	};
+
+    if (params.HEADLESS)
+        extensions.push_back( VK_KHR_SWAPCHAIN_EXTENSION_NAME );
+
+    return extensions;
 }
 
 /* 
@@ -984,6 +997,132 @@ Pipeline createComputePipeline(Device const &device,
     auto [_, computePipeline] = device.createComputePipeline(nullptr, info);
 
     return computePipeline;
+}
+
+vk::Pipeline createRayTracingPipeline(vk::Device const &device,
+                                      std::vector<vk::DescriptorSetLayout> const &descriptorSetLayouts,
+                                      vk::PipelineLayout &layout) {
+
+    auto raygen = readFile("/raygen.ray.spv");
+    auto miss = readFile("/miss.ray.spv");
+    auto closestHit = readFile("/hit.ray.spv");
+
+    PipelineShaderStageCreateInfo stagesInfo[] = {
+        {	// raygen
+            .sType = StructureType::ePipelineShaderStageCreateInfo,
+            .stage = ShaderStageFlagBits::eRaygenKHR,
+            .module = device.createShaderModule({
+                .sType = StructureType::eShaderModuleCreateInfo,
+                .codeSize = raygen.size(),
+                .pCode = reinterpret_cast<const uint32_t*>(raygen.data()),
+            }),
+            .pName = "main"
+        },{	// miss
+            .sType = StructureType::ePipelineShaderStageCreateInfo,
+            .stage = ShaderStageFlagBits::eMissKHR,
+            .module = device.createShaderModule({
+                .sType = StructureType::eShaderModuleCreateInfo,
+                .codeSize = miss.size(),
+                .pCode = reinterpret_cast<const uint32_t*>(miss.data()),
+            }),
+            .pName = "main"
+        },{	// closest hit
+            .sType = StructureType::ePipelineShaderStageCreateInfo,
+            .stage = ShaderStageFlagBits::eClosestHitKHR,
+            .module = device.createShaderModule({
+                .sType = StructureType::eShaderModuleCreateInfo,
+                .codeSize = closestHit.size(),
+                .pCode = reinterpret_cast<const uint32_t*>(closestHit.data()),
+            }),
+            .pName = "main"
+        }
+    };
+
+    // groups are of 3 types:
+    // - general -> raygen / miss
+    // - triangle -> closest / any hit for triangles only (FAST)
+    // - procedural -> closest / any hit for custom geometry (SLOW)
+    RayTracingShaderGroupCreateInfoKHR groupInfo[] = {
+        {	// raygen
+            .sType = StructureType::eRayTracingShaderGroupCreateInfoKHR,
+            .type = RayTracingShaderGroupTypeKHR::eGeneral,
+            .generalShader = 0,
+            .closestHitShader = ShaderUnusedKHR,
+            .anyHitShader = ShaderUnusedKHR,
+            .intersectionShader = ShaderUnusedKHR,
+        },{	// miss
+            .sType = StructureType::eRayTracingShaderGroupCreateInfoKHR,
+            .type = RayTracingShaderGroupTypeKHR::eGeneral,
+            .generalShader = 1,
+            .closestHitShader = ShaderUnusedKHR,
+            .anyHitShader = ShaderUnusedKHR,
+            .intersectionShader = ShaderUnusedKHR,
+        },{ // closest hit for triangles
+            .sType = StructureType::eRayTracingShaderGroupCreateInfoKHR,
+            .type = RayTracingShaderGroupTypeKHR::eGeneral,
+            .generalShader = ShaderUnusedKHR,
+            .closestHitShader = 2,
+            .anyHitShader = ShaderUnusedKHR,
+            .intersectionShader = ShaderUnusedKHR,
+        }
+    };
+
+    RayTracingPipelineCreateInfoKHR info = {
+        .sType = StructureType::eRayTracingPipelineCreateInfoKHR,
+        .stageCount = 3,
+        .pStages = stagesInfo,
+        .groupCount = 3,
+        .pGroups = groupInfo,
+        .maxPipelineRayRecursionDepth = 32,
+		.layout = layout,
+    };
+
+    auto [_, rtPipeline] = device.createRayTracingPipelineKHR(nullptr, nullptr, &info);
+    return rtPipeline;
+}
+
+void createAccelerationStructure(PhysicalDevice const &physicalDevice, Device const &device) {
+    // for now we just have one bottom level in the top level
+
+	AccelerationStructureBuildGeometryInfoKHR buildInfo {
+     	.sType = StructureType::eAccelerationStructureBuildGeometryInfoKHR,
+		.type = AccelerationStructureTypeKHR::eTopLevel,
+		.mode = BuildAccelerationStructureModeKHR::eBuild,
+        .dstAccelerationStructure = nullptr, // todo
+        .geometryCount = 1,
+        .pGeometries = nullptr, // todo
+        .scratchData = nullptr, // todo
+    };
+
+    int hundred = 100;
+
+    auto sizes = device.getAccelerationStructureBuildSizesKHR(
+        AccelerationStructureBuildTypeKHR::eHost, // we are building on the CPU
+        buildInfo,
+        &hundred // todo (max primitive count ( THIS IS TOP LEVEL ??? ))
+    );
+
+    void *scratchBuffer = malloc(sizes.buildScratchSize);
+    buildInfo.scratchData = scratchBuffer;
+
+    DeviceMemory structureMemory;
+	Buffer structureBuffer = createBuffer(physicalDevice, 
+                                          device, 
+                                          sizes.accelerationStructureSize, 
+                                          BufferUsageFlagBits::eAccelerationStructureStorageKHR, 
+                                          MemoryPropertyFlagBits::eDeviceLocal, 
+                                          structureMemory);
+
+    AccelerationStructureCreateInfoKHR accelInfo = {
+        .sType = StructureType::eAccelerationStructureCreateInfoKHR,
+        .buffer = structureBuffer,
+        .size = sizes.accelerationStructureSize,
+        .type = AccelerationStructureTypeKHR::eTopLevel,
+        .deviceAddress = device.getAccelerationStructureAddressKHR()
+    };
+    device.createAccelerationStructureKHR()
+
+	delete scratchBuffer; // instead of free() ?
 }
 
 /*
