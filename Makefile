@@ -29,7 +29,7 @@ compile: $(TARGET)
 $(TARGET): $(OBJ_FILES) $(COMPILED_COMPUTE_SHADERS)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJ_FILES) $(LDFLAGS)
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.hpp $(PCH_FILE)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.hpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -I$(BUILD_DIR) -c $< -o $@
 

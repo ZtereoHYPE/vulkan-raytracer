@@ -91,7 +91,7 @@ void glass_shader(inout Ray ray, HitRecord hit) {
     vec3 out_dir;
     if (total_reflection || schlick_reflection) {
         // If a total reflection or a random schlick reflectance happened, reflect the ray
-        out_dir = dir - 2 * dot(dir, normal) * normal;
+        out_dir = reflect(dir, normal);
 
     } else {
         // Else, calculate the parallel and orthogonal components of the refraction to the surface

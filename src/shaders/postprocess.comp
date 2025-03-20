@@ -30,6 +30,11 @@ vec4 gamma_correction(vec4 color) {
     return sqrt(color);
 }
 
+/* Very very basic ACES Tone-Mapping (https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/) */
+vec3 tone_map(vec3 x) {
+	return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+}
+
 /* Entrypoint */
 void main() {
     ivec2 coordinates = ivec2(gl_GlobalInvocationID.xy);
@@ -37,9 +42,9 @@ void main() {
 
     if (coordinates.x < size.x && coordinates.y < size.y) {
         uint idx = coordinates.x + coordinates.y * size.x;
-        vec4 color = vec4(raybuffer.rays[idx].light, 1);
+        vec4 mapped = gamma_correction(vec4(tone_map(raybuffer.rays[idx].light), 1));
 
-        imageStore(framebuffer, coordinates, gamma_correction(color));
+        imageStore(framebuffer, coordinates, mapped);
     }
 }
 
